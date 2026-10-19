@@ -1,0 +1,51 @@
+const TOKEN_KEY = 'se_token'
+
+export function getToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY)
+}
+
+export function setToken(token: string | null) {
+  if (token) localStorage.setItem(TOKEN_KEY, token)
+  else localStorage.removeItem(TOKEN_KEY)
+}
+
+export class ApiError extends Error {
+  status: number
+  constructor(status: number, message: string) {
+    super(message)
+    this.status = status
+  }
+}
+
+export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const headers = new Headers(options.headers || {})
+  if (!(options.body instanceof FormData)) {
+    headers.set('Content-Type', 'application/json')
+  }
+  const token = getToken()
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+
+  const res = await fetch(path, { ...options, headers })
+  if (!res.ok) {
+    let detail = res.statusText
+    try {
+      const body = await res.json()
+      detail = body.detail || JSON.stringify(body)
+    } catch {
+      /* ignore */
+    }
+    throw new ApiError(res.status, typeof detail === 'string' ? detail : JSON.stringify(detail))
+  }
+  if (res.status === 204) return undefined as T
+  return res.json()
+}
+
+export function money(cents: number, currency = 'USD'): string {
+  return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(cents / 100)
+}
+
+export function wsUrl(groupId: number): string {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+  const token = getToken() || ''
+  return `${proto}://${location.host}/ws/groups/${groupId}?token=${encodeURIComponent(token)}`
+}
