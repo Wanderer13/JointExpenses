@@ -148,6 +148,42 @@ def test_group_invite_join_and_expense_flow(client):
     ] == []
 
 
+def test_group_currency_allowlist(client):
+    alice = _register(client, "Owner", "currency@example.com")
+    ah = _auth_header(alice["access_token"])
+
+    bad = client.post(
+        "/api/groups",
+        headers=ah,
+        json={"name": "BadCur", "currency": "FOO", "reminder_days": 7},
+    )
+    assert bad.status_code == 422
+
+    ok = client.post(
+        "/api/groups",
+        headers=ah,
+        json={"name": "EuroTrip", "currency": "eur", "reminder_days": 7},
+    )
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["currency"] == "EUR"
+
+    gid = ok.json()["id"]
+    patched = client.patch(
+        f"/api/groups/{gid}",
+        headers=ah,
+        json={"currency": "GBP"},
+    )
+    assert patched.status_code == 200
+    assert patched.json()["currency"] == "GBP"
+
+    rejected = client.patch(
+        f"/api/groups/{gid}",
+        headers=ah,
+        json={"currency": "ZZZ"},
+    )
+    assert rejected.status_code == 422
+
+
 def test_closed_group_blocks_expenses(client):
     alice = _register(client, "Owner", "owner@example.com")
     ah = _auth_header(alice["access_token"])

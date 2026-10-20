@@ -2,11 +2,12 @@
 import { onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { api } from '../api'
+import { CURRENCIES, suggestCurrency } from '../currencies'
 import type { Group } from '../types'
 
 const groups = ref<Group[]>([])
 const name = ref('')
-const currency = ref('USD')
+const currency = ref(suggestCurrency())
 const reminderDays = ref(7)
 const error = ref('')
 const loading = ref(false)
@@ -28,6 +29,7 @@ async function createGroup() {
       }),
     })
     name.value = ''
+    currency.value = suggestCurrency()
     await load()
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed'
@@ -65,7 +67,14 @@ onMounted(load)
       <h2>New group</h2>
       <form class="stack" @submit.prevent="createGroup">
         <label>Name <input v-model="name" required /></label>
-        <label>Currency <input v-model="currency" maxlength="8" required /></label>
+        <label>
+          Currency
+          <select v-model="currency" required>
+            <option v-for="c in CURRENCIES" :key="c.code" :value="c.code">
+              {{ c.code }} — {{ c.label }}
+            </option>
+          </select>
+        </label>
         <label>Reminder after (days) <input v-model.number="reminderDays" type="number" min="1" max="365" /></label>
         <p v-if="error" class="error">{{ error }}</p>
         <button type="submit" :disabled="loading">Create</button>

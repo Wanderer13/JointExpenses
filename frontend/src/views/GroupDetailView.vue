@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { api, money, wsUrl } from '../api'
+import { CURRENCIES } from '../currencies'
 import { useAuthStore } from '../stores/auth'
 import type { Activity, Expense, Group, GroupBalances, Settlement } from '../types'
 
@@ -16,6 +17,8 @@ const activity = ref<Activity[]>([])
 const error = ref('')
 const inviteEmail = ref('')
 const joinToken = ref('')
+const editCurrency = ref('USD')
+const currencySaving = ref(false)
 let socket: WebSocket | null = null
 
 const amount = ref('')
@@ -50,6 +53,7 @@ async function refreshAll() {
   activity.value = await api<Activity[]>(`/api/groups/${gid}/activity`)
   if (!payerId.value && auth.user) payerId.value = auth.user.id
   if (group.value) {
+    editCurrency.value = group.value.currency
     for (const m of group.value.members) {
       if (selected.value[m.user_id] === undefined) selected.value[m.user_id] = true
       if (!shares.value[m.user_id]) shares.value[m.user_id] = 1
@@ -156,6 +160,25 @@ async function closeOrReopen() {
   await refreshAll()
 }
 
+async function saveCurrency() {
+  if (!group.value || !isOwner.value) return
+  if (editCurrency.value === group.value.currency) return
+  error.value = ''
+  currencySaving.value = true
+  try {
+    group.value = await api<Group>(`/api/groups/${group.value.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ currency: editCurrency.value }),
+    })
+    await refreshAll()
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Failed'
+    editCurrency.value = group.value.currency
+  } finally {
+    currencySaving.value = false
+  }
+}
+
 watch(
   () => props.id,
   async () => {
@@ -190,6 +213,27 @@ onUnmounted(() => socket?.close())
           </button>
         </div>
       </div>
+      <form
+        v-if="isOwner"
+        class="row"
+        style="margin-top: 0.75rem; align-items: flex-end; gap: 0.75rem; flex-wrap: wrap"
+        @submit.prevent="saveCurrency"
+      >
+        <label style="margin: 0">
+          Group currency
+          <select v-model="editCurrency">
+            <option v-for="c in CURRENCIES" :key="c.code" :value="c.code">
+              {{ c.code }} — {{ c.label }}
+            </option>
+          </select>
+        </label>
+        <button type="submit" :disabled="currencySaving || editCurrency === group.currency">
+          {{ currencySaving ? 'Saving…' : 'Update currency' }}
+        </button>
+        <span class="muted" style="font-size: 0.85rem">
+          Changes the display currency only — amounts are not converted.
+        </span>
+      </form>
       <div class="tabs" style="margin-top: 1rem">
         <button type="button" :class="{ active: tab === 'expenses' }" @click="tab = 'expenses'">Expenses</button>
         <button type="button" :class="{ active: tab === 'balances' }" @click="tab = 'balances'">Balances</button>

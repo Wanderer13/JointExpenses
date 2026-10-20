@@ -24,6 +24,7 @@ Timestamps in local time (UTC+4), 2026-10-19.
 6. **Email stub to filesystem** — `backend/mail_outbox/*.json` instead of SMTP (allowed by the assignment).
 7. **WebSocket per group** — for two tabs; broadcast `balances_updated` after mutations.
 8. **Auth: JWT login/password + optional Google** — email/password remains the default; Google Sign-In added via GIS ID tokens (`POST /api/auth/google`), not a full OAuth redirect.
+9. **One currency per group** — curated ISO-4217 allowlist (frontend selector + backend validation); create form suggests from browser locale; owner can change currency (display only, no FX conversion).
 
 ## Packages (why)
 

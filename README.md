@@ -80,7 +80,7 @@ cd frontend && npm install && npm run dev
 ## What works
 
 - Registration / login (JWT), optional Google Sign-In (GIS ID token)
-- Groups: create, members, invite by link and email (stub), close/reopen
+- Groups: create, members, invite by link and email (stub), close/reopen; one currency per group (selector + locale suggestion)
 - Expenses: equal / shares / exact, category, date, comment, receipt file
 - Balances per group and across all groups; suggested transfers (greedy)
 - Settlements: pending → confirm/reject by recipient; only confirmed affect balances
@@ -93,7 +93,7 @@ cd frontend && npm install && npm run dev
 ## Out of scope / next steps
 
 - Real SMTP and object storage for receipts
-- FX rates / multi-currency inside a group
+- FX rates / multiple currencies inside a single group (each group has one currency)
 - Expense edit UI (API `PATCH /api/expenses/{id}` already exists)
 - Alembic migrations instead of `create_all` for production
 - Richer mobile layout / PWA

@@ -3,8 +3,9 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
+from app.currencies import is_allowed_currency, normalize_currency
 from app.models import GroupStatus, MemberRole, SettlementStatus, SplitType
 
 
@@ -42,11 +43,29 @@ class GroupCreate(BaseModel):
     currency: str = Field(default="USD", min_length=3, max_length=8)
     reminder_days: int = Field(default=7, ge=1, le=365)
 
+    @field_validator("currency")
+    @classmethod
+    def currency_must_be_allowed(cls, value: str) -> str:
+        code = normalize_currency(value)
+        if not is_allowed_currency(code):
+            raise ValueError(f"Unsupported currency: {code}")
+        return code
+
 
 class GroupUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     currency: str | None = Field(default=None, min_length=3, max_length=8)
     reminder_days: int | None = Field(default=None, ge=1, le=365)
+
+    @field_validator("currency")
+    @classmethod
+    def currency_must_be_allowed(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        code = normalize_currency(value)
+        if not is_allowed_currency(code):
+            raise ValueError(f"Unsupported currency: {code}")
+        return code
 
 
 class MemberOut(BaseModel):
