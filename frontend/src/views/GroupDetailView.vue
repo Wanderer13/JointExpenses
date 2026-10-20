@@ -3,7 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { api, money, wsUrl } from '../api'
 import { CURRENCIES } from '../currencies'
 import { useAuthStore } from '../stores/auth'
-import type { Activity, Expense, Group, GroupBalances, Settlement } from '../types'
+import { SPLIT_TYPE_LABELS, type Activity, type Expense, type Group, type GroupBalances, type Settlement, type SplitType } from '../types'
 
 const props = defineProps<{ id: string }>()
 const auth = useAuthStore()
@@ -25,7 +25,7 @@ const amount = ref('')
 const category = ref('general')
 const expenseDate = ref(new Date().toISOString().slice(0, 10))
 const comment = ref('')
-const splitType = ref<'equal' | 'shares' | 'exact'>('equal')
+const splitType = ref<SplitType>('equal')
 const payerId = ref<number | null>(null)
 const selected = ref<Record<number, boolean>>({})
 const shares = ref<Record<number, number>>({})
@@ -257,7 +257,7 @@ onUnmounted(() => socket?.close())
               <span class="muted">{{ e.expense_date }}</span>
             </div>
             <div class="muted">
-              Paid by {{ e.payer_name }} · split {{ e.split_type }}
+              Paid by {{ e.payer_name }} · {{ SPLIT_TYPE_LABELS[e.split_type] }}
               <span v-if="e.comment"> · {{ e.comment }}</span>
             </div>
             <div class="muted">
@@ -292,9 +292,9 @@ onUnmounted(() => socket?.close())
           <label>
             Split type
             <select v-model="splitType">
-              <option value="equal">Equal</option>
-              <option value="shares">shares</option>
-              <option value="exact">exact amounts</option>
+              <option v-for="(label, value) in SPLIT_TYPE_LABELS" :key="value" :value="value">
+                {{ label }}
+              </option>
             </select>
           </label>
           <div class="stack">
@@ -308,7 +308,10 @@ onUnmounted(() => socket?.close())
                 type="number"
                 min="1"
                 style="width: 5rem"
+                title="Shares"
+                placeholder="shares"
               />
+              <span v-if="splitType === 'shares'" class="muted">shares</span>
               <input
                 v-if="splitType === 'exact'"
                 v-model="exact[m.user_id]"
@@ -316,6 +319,7 @@ onUnmounted(() => socket?.close())
                 step="0.01"
                 min="0"
                 style="width: 7rem"
+                title="Exact amount"
                 placeholder="0.00"
               />
             </label>

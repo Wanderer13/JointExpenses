@@ -29,12 +29,20 @@ export interface Split {
   name?: string | null
 }
 
+export type SplitType = 'equal' | 'shares' | 'exact'
+
+export const SPLIT_TYPE_LABELS: Record<SplitType, string> = {
+  equal: 'Split equally',
+  shares: 'By shares',
+  exact: 'Exact amounts',
+}
+
 export interface Expense {
   id: number
   group_id: number
   payer_id: number
   amount_cents: number
-  split_type: 'equal' | 'shares' | 'exact'
+  split_type: SplitType
   category: string
   expense_date: string
   comment: string | null
