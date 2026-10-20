@@ -70,7 +70,7 @@ cd frontend && npm install && npm run dev
 - WebSocket-обновления балансов/ленты при двух открытых вкладках
 - Reminder job: письмо в `backend/mail_outbox/` не чаще раза в неделю
 - При закрытии группы — итоговый отчёт в stub-почту всем участникам
-- Юнит-тесты split/balance: `cd backend && python -m pytest`
+- Юнит-тесты: split, balances/settlements, security, mail stub, API flows — `cd backend && python -m pytest`
 
 ## Что не вошло / next steps
 
