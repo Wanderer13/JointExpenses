@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.models import Group, GroupMember, GroupStatus, ReminderSent, User
 from app.services.balance_service import group_balances_payload, oldest_debt_age_days
-from app.services.mail_stub import send_email
+from app.services.mail import send_email
 
 
 def process_debt_reminders(db: Session) -> int:

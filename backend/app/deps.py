@@ -1,21 +1,32 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Group, GroupMember, User
-from app.security import decode_token, get_user_by_id
+from app.models import Group, GroupMember, MemberRole, User
+from app.security import ACCESS_COOKIE, decode_token, get_user_by_id
 
 bearer = HTTPBearer(auto_error=False)
 
 
+def _extract_token(
+    request: Request,
+    creds: HTTPAuthorizationCredentials | None,
+) -> str | None:
+    if creds is not None:
+        return creds.credentials
+    return request.cookies.get(ACCESS_COOKIE)
+
+
 def get_current_user(
+    request: Request,
     creds: HTTPAuthorizationCredentials | None = Depends(bearer),
     db: Session = Depends(get_db),
 ) -> User:
-    if creds is None:
+    token = _extract_token(request, creds)
+    if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    user_id = decode_token(creds.credentials)
+    user_id = decode_token(token)
     if user_id is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
     user = get_user_by_id(db, user_id)
@@ -40,3 +51,10 @@ def get_group_or_404(db: Session, group_id: int) -> Group:
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
     return group
+
+
+def require_expense_mutator(db: Session, group_id: int, user: User, *, payer_id: int, created_by_id: int) -> None:
+    membership = get_membership(db, group_id, user.id)
+    if user.id in (payer_id, created_by_id) or membership.role == MemberRole.owner:
+        return
+    raise HTTPException(status_code=403, detail="Only payer, creator, or owner can modify this expense")

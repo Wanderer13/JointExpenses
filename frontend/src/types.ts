@@ -41,6 +41,7 @@ export interface Expense {
   id: number
   group_id: number
   payer_id: number
+  created_by_id: number
   amount_cents: number
   split_type: SplitType
   category: string

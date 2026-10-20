@@ -10,6 +10,7 @@ from app.deps import get_current_user, get_group_or_404, get_membership
 from app.models import GroupMember, GroupStatus, Settlement, SettlementStatus, User
 from app.schemas import SettlementAction, SettlementCreate, SettlementOut
 from app.services.activity_service import log_activity, notify_users
+from app.services.balance_service import compute_net_balances, simplify_debts
 from app.ws import manager
 
 router = APIRouter(tags=["settlements"])
@@ -79,6 +80,20 @@ async def create_settlement(
         raise HTTPException(status_code=400, detail="Cannot settle with yourself")
     if user.id not in (payload.from_user_id, payload.to_user_id):
         raise HTTPException(status_code=403, detail="You must be a party to the settlement")
+
+    nets = compute_net_balances(db, group_id)
+    owed = 0
+    for from_id, to_id, amount in simplify_debts(nets):
+        if from_id == payload.from_user_id and to_id == payload.to_user_id:
+            owed = amount
+            break
+    if owed <= 0:
+        raise HTTPException(status_code=400, detail="No outstanding debt between these users")
+    if payload.amount_cents > owed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Settlement exceeds outstanding debt ({owed} cents)",
+        )
 
     settlement = Settlement(
         group_id=group_id,

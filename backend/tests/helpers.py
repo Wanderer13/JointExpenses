@@ -26,6 +26,7 @@ def add_equal_expense(
     expense = Expense(
         group_id=group_id,
         payer_id=payer_id,
+        created_by_id=payer_id,
         amount_cents=amount_cents,
         split_type=SplitType.equal,
         category="test",

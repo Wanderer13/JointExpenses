@@ -1,20 +1,20 @@
-const TOKEN_KEY = 'se_token'
-
-export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY)
-}
-
-export function setToken(token: string | null) {
-  if (token) localStorage.setItem(TOKEN_KEY, token)
-  else localStorage.removeItem(TOKEN_KEY)
-}
-
 export class ApiError extends Error {
   status: number
   constructor(status: number, message: string) {
     super(message)
     this.status = status
   }
+}
+
+/** In-memory access token for Authorization header / WS fallback (cookies are primary). */
+let accessToken: string | null = null
+
+export function getToken(): string | null {
+  return accessToken
+}
+
+export function setToken(token: string | null) {
+  accessToken = token
 }
 
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -25,7 +25,7 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   const token = getToken()
   if (token) headers.set('Authorization', `Bearer ${token}`)
 
-  const res = await fetch(path, { ...options, headers })
+  const res = await fetch(path, { ...options, headers, credentials: 'include' })
   if (!res.ok) {
     let detail = res.statusText
     try {
@@ -46,6 +46,11 @@ export function money(cents: number, currency = 'USD'): string {
 
 export function wsUrl(groupId: number): string {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-  const token = getToken() || ''
-  return `${proto}://${location.host}/ws/groups/${groupId}?token=${encodeURIComponent(token)}`
+  const token = getToken()
+  const q = token ? `?token=${encodeURIComponent(token)}` : ''
+  return `${proto}://${location.host}/ws/groups/${groupId}${q}`
+}
+
+export function receiptUrl(expenseId: number): string {
+  return `/api/expenses/${expenseId}/receipt`
 }

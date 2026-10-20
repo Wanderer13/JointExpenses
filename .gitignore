@@ -14,6 +14,7 @@ backend/mail_outbox/*
 node_modules/
 frontend/dist/
 .env
+docker-compose.override.yml
 .DS_Store
 *.log
 .idea/

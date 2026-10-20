@@ -1,9 +1,17 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { api, money, wsUrl } from '../api'
+import { api, money, receiptUrl, wsUrl } from '../api'
 import { CURRENCIES } from '../currencies'
 import { useAuthStore } from '../stores/auth'
-import { SPLIT_TYPE_LABELS, type Activity, type Expense, type Group, type GroupBalances, type Settlement, type SplitType } from '../types'
+import {
+  SPLIT_TYPE_LABELS,
+  type Activity,
+  type Expense,
+  type Group,
+  type GroupBalances,
+  type Settlement,
+  type SplitType,
+} from '../types'
 
 const props = defineProps<{ id: string }>()
 const auth = useAuthStore()
@@ -19,6 +27,7 @@ const inviteEmail = ref('')
 const joinToken = ref('')
 const editCurrency = ref('USD')
 const currencySaving = ref(false)
+const editingExpenseId = ref<number | null>(null)
 let socket: WebSocket | null = null
 
 const amount = ref('')
@@ -39,9 +48,54 @@ const isOwner = computed(
 const inviteLink = computed(() =>
   group.value ? `${window.location.origin}/join/${group.value.invite_token}` : '',
 )
+const formTitle = computed(() => (editingExpenseId.value ? 'Edit expense' : 'Add expense'))
+
+function canMutateExpense(e: Expense): boolean {
+  if (!auth.user) return false
+  return isOwner.value || e.payer_id === auth.user.id || e.created_by_id === auth.user.id
+}
 
 function centsFromInput(value: string): number {
   return Math.round(parseFloat(value || '0') * 100)
+}
+
+function resetExpenseForm() {
+  editingExpenseId.value = null
+  amount.value = ''
+  category.value = 'general'
+  expenseDate.value = new Date().toISOString().slice(0, 10)
+  comment.value = ''
+  splitType.value = 'equal'
+  receiptFile.value = null
+  if (auth.user) payerId.value = auth.user.id
+  if (group.value) {
+    for (const m of group.value.members) {
+      selected.value[m.user_id] = true
+      shares.value[m.user_id] = 1
+      exact.value[m.user_id] = ''
+    }
+  }
+}
+
+function startEdit(e: Expense) {
+  editingExpenseId.value = e.id
+  amount.value = (e.amount_cents / 100).toFixed(2)
+  category.value = e.category
+  expenseDate.value = e.expense_date
+  comment.value = e.comment || ''
+  splitType.value = e.split_type
+  payerId.value = e.payer_id
+  receiptFile.value = null
+  if (group.value) {
+    const splitIds = new Set(e.splits.map((s) => s.user_id))
+    for (const m of group.value.members) {
+      selected.value[m.user_id] = splitIds.has(m.user_id)
+      const split = e.splits.find((s) => s.user_id === m.user_id)
+      shares.value[m.user_id] = split?.shares || 1
+      exact.value[m.user_id] = split ? (split.amount_cents / 100).toFixed(2) : ''
+    }
+  }
+  tab.value = 'expenses'
 }
 
 async function refreshAll() {
@@ -70,10 +124,9 @@ function connectWs() {
   }
 }
 
-async function createExpense() {
-  error.value = ''
-  if (!group.value || !payerId.value) return
-  const participants = group.value.members
+function buildParticipants() {
+  if (!group.value) return []
+  return group.value.members
     .filter((m) => selected.value[m.user_id])
     .map((m) => {
       if (splitType.value === 'shares') {
@@ -84,27 +137,41 @@ async function createExpense() {
       }
       return { user_id: m.user_id }
     })
+}
+
+async function saveExpense() {
+  error.value = ''
+  if (!group.value || !payerId.value) return
+  const participants = buildParticipants()
+  const body = {
+    payer_id: payerId.value,
+    amount_cents: centsFromInput(amount.value),
+    split_type: splitType.value,
+    participants,
+    category: category.value,
+    expense_date: expenseDate.value,
+    comment: comment.value || null,
+  }
   try {
-    const created = await api<Expense>(`/api/groups/${group.value.id}/expenses`, {
-      method: 'POST',
-      body: JSON.stringify({
-        payer_id: payerId.value,
-        amount_cents: centsFromInput(amount.value),
-        split_type: splitType.value,
-        participants,
-        category: category.value,
-        expense_date: expenseDate.value,
-        comment: comment.value || null,
-      }),
-    })
-    if (receiptFile.value) {
+    let expenseId = editingExpenseId.value
+    if (expenseId) {
+      await api<Expense>(`/api/expenses/${expenseId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      })
+    } else {
+      const created = await api<Expense>(`/api/groups/${group.value.id}/expenses`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      })
+      expenseId = created.id
+    }
+    if (receiptFile.value && expenseId) {
       const fd = new FormData()
       fd.append('file', receiptFile.value)
-      await api(`/api/expenses/${created.id}/receipt`, { method: 'POST', body: fd })
+      await api(`/api/expenses/${expenseId}/receipt`, { method: 'POST', body: fd })
     }
-    amount.value = ''
-    comment.value = ''
-    receiptFile.value = null
+    resetExpenseForm()
     await refreshAll()
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed'
@@ -112,29 +179,45 @@ async function createExpense() {
 }
 
 async function deleteExpense(expenseId: number) {
-  await api(`/api/expenses/${expenseId}`, { method: 'DELETE' })
-  await refreshAll()
+  error.value = ''
+  try {
+    await api(`/api/expenses/${expenseId}`, { method: 'DELETE' })
+    if (editingExpenseId.value === expenseId) resetExpenseForm()
+    await refreshAll()
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Failed'
+  }
 }
 
 async function settle(fromId: number, toId: number, amountCents: number) {
   if (!group.value) return
-  await api(`/api/groups/${group.value.id}/settlements`, {
-    method: 'POST',
-    body: JSON.stringify({
-      from_user_id: fromId,
-      to_user_id: toId,
-      amount_cents: amountCents,
-    }),
-  })
-  await refreshAll()
+  error.value = ''
+  try {
+    await api(`/api/groups/${group.value.id}/settlements`, {
+      method: 'POST',
+      body: JSON.stringify({
+        from_user_id: fromId,
+        to_user_id: toId,
+        amount_cents: amountCents,
+      }),
+    })
+    await refreshAll()
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Failed'
+  }
 }
 
 async function settlementAction(id: number, action: 'confirm' | 'reject') {
-  await api(`/api/settlements/${id}/action`, {
-    method: 'POST',
-    body: JSON.stringify({ action }),
-  })
-  await refreshAll()
+  error.value = ''
+  try {
+    await api(`/api/settlements/${id}/action`, {
+      method: 'POST',
+      body: JSON.stringify({ action }),
+    })
+    await refreshAll()
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Failed'
+  }
 }
 
 async function invite() {
@@ -182,6 +265,7 @@ async function saveCurrency() {
 watch(
   () => props.id,
   async () => {
+    resetExpenseForm()
     await refreshAll()
     connectWs()
   },
@@ -261,26 +345,35 @@ onUnmounted(() => socket?.close())
               <span v-if="e.comment"> · {{ e.comment }}</span>
             </div>
             <div class="muted">
-              {{ e.splits.map((s) => `${s.name}: ${money(s.amount_cents, group.currency)}`).join(' · ') }}
+              {{
+                e.splits
+                  .map((s) => `${s.name}: ${money(s.amount_cents, group!.currency)}`)
+                  .join(' · ')
+              }}
             </div>
-            <a v-if="e.receipt_path" :href="`/uploads/${e.receipt_path}`" target="_blank">Receipt</a>
-            <button
-              v-if="!closed"
-              class="danger"
-              style="margin-top: 0.5rem"
-              type="button"
-              @click="deleteExpense(e.id)"
-            >
-              Delete
-            </button>
+            <a v-if="e.receipt_path" :href="receiptUrl(e.id)" target="_blank" rel="noopener">Receipt</a>
+            <div v-if="!closed && canMutateExpense(e)" class="row" style="margin-top: 0.5rem; gap: 0.5rem">
+              <button class="secondary" type="button" @click="startEdit(e)">Edit</button>
+              <button class="danger" type="button" @click="deleteExpense(e.id)">Delete</button>
+            </div>
           </div>
           <p v-if="!expenses.length" class="muted">No expenses yet.</p>
         </div>
       </div>
 
-      <form class="panel stack" @submit.prevent="createExpense">
-        <h2>Add expense</h2>
-        <p v-if="closed" class="muted">Group is closed — new expenses are blocked.</p>
+      <form class="panel stack" @submit.prevent="saveExpense">
+        <div class="row" style="justify-content: space-between">
+          <h2>{{ formTitle }}</h2>
+          <button
+            v-if="editingExpenseId"
+            class="secondary"
+            type="button"
+            @click="resetExpenseForm"
+          >
+            Cancel edit
+          </button>
+        </div>
+        <p v-if="closed" class="muted">Group is closed — expense changes are blocked.</p>
         <fieldset :disabled="closed" class="stack" style="border: 0; padding: 0; margin: 0">
           <label>Amount <input v-model="amount" type="number" step="0.01" min="0.01" required /></label>
           <label>
@@ -327,8 +420,15 @@ onUnmounted(() => socket?.close())
           <label>Category <input v-model="category" /></label>
           <label>Date <input v-model="expenseDate" type="date" required /></label>
           <label>Comment <input v-model="comment" /></label>
-          <label>Receipt <input type="file" @change="receiptFile = ($event.target as HTMLInputElement).files?.[0] || null" /></label>
-          <button type="submit">Save expense</button>
+          <label>
+            Receipt
+            <input
+              type="file"
+              accept=".jpg,.jpeg,.png,.webp,.pdf"
+              @change="receiptFile = ($event.target as HTMLInputElement).files?.[0] || null"
+            />
+          </label>
+          <button type="submit">{{ editingExpenseId ? 'Update expense' : 'Save expense' }}</button>
         </fieldset>
       </form>
     </section>
@@ -406,7 +506,7 @@ onUnmounted(() => socket?.close())
       </p>
       <form class="stack" @submit.prevent="invite">
         <label>Invite by email <input v-model="inviteEmail" type="email" required /></label>
-        <button type="submit">Send invite (stub mailbox)</button>
+        <button type="submit">Send invite</button>
       </form>
       <form class="stack" @submit.prevent="joinWithToken">
         <label>Or join with token <input v-model="joinToken" required /></label>

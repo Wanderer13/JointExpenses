@@ -41,7 +41,16 @@ async function handleGoogleCredential(credential: string) {
   error.value = ''
   loading.value = true
   try {
-    await auth.loginWithGoogle(credential)
+    try {
+      await auth.loginWithGoogle(credential)
+    } catch (e) {
+      // Existing password account: link Google only after password proof
+      if (e instanceof Error && e.message.includes('provide password') && password.value) {
+        await auth.loginWithGoogle(credential, password.value)
+      } else {
+        throw e
+      }
+    }
     await afterAuth()
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Google sign-in failed'

@@ -22,6 +22,7 @@ class UserLogin(BaseModel):
 
 class GoogleAuthIn(BaseModel):
     credential: str = Field(min_length=1)
+    password: str | None = Field(default=None, min_length=6, max_length=128)
 
 
 class UserOut(BaseModel):
@@ -135,6 +136,7 @@ class ExpenseOut(BaseModel):
     id: int
     group_id: int
     payer_id: int
+    created_by_id: int
     amount_cents: int
     split_type: SplitType
     category: str

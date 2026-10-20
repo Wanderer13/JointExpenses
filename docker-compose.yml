@@ -2,36 +2,61 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: expenses
-      POSTGRES_PASSWORD: expenses
-      POSTGRES_DB: expenses
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${POSTGRES_USER:-expenses}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-expenses}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U expenses -d expenses"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-expenses} -d ${POSTGRES_DB:-expenses}"]
       interval: 5s
       timeout: 5s
       retries: 10
 
   api:
     build: ./backend
-    ports:
-      - "8000:8000"
     environment:
-      DATABASE_URL: postgresql+psycopg://expenses:expenses@db:5432/expenses
-      SECRET_KEY: dev-secret-change-me
-      CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      APP_ENV: ${APP_ENV:-production}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-expenses}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-expenses}
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080}
       UPLOAD_DIR: /app/uploads
       MAIL_OUTBOX_DIR: /app/mail_outbox
+      MAIL_BACKEND: ${MAIL_BACKEND:-stub}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_TLS: ${SMTP_TLS:-true}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
+      REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-7}
     volumes:
-      - ./backend/uploads:/app/uploads
-      - ./backend/mail_outbox:/app/mail_outbox
+      - uploads:/app/uploads
+      - mail_outbox:/app/mail_outbox
     depends_on:
       db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      api:
         condition: service_healthy
 
 volumes:
   pgdata:
+  uploads:
+  mail_outbox:

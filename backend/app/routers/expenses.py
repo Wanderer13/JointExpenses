@@ -4,11 +4,12 @@ import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, joinedload
 
 from app.config import get_settings
 from app.database import get_db
-from app.deps import get_current_user, get_group_or_404, get_membership
+from app.deps import get_current_user, get_group_or_404, get_membership, require_expense_mutator
 from app.models import Expense, ExpenseSplit, GroupMember, GroupStatus, SplitType, User
 from app.schemas import ExpenseCreate, ExpenseOut, ExpenseUpdate, SplitOut, SplitParticipantIn
 from app.services.activity_service import log_activity, notify_users
@@ -16,7 +17,8 @@ from app.services.split_service import compute_split_amounts
 from app.ws import manager
 
 router = APIRouter(tags=["expenses"])
-settings = get_settings()
+
+ALLOWED_RECEIPT_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".pdf"}
 
 
 def _expense_out(expense: Expense) -> ExpenseOut:
@@ -24,6 +26,7 @@ def _expense_out(expense: Expense) -> ExpenseOut:
         id=expense.id,
         group_id=expense.group_id,
         payer_id=expense.payer_id,
+        created_by_id=expense.created_by_id,
         amount_cents=expense.amount_cents,
         split_type=expense.split_type,
         category=expense.category,
@@ -116,6 +119,7 @@ async def create_expense(
     expense = Expense(
         group_id=group_id,
         payer_id=payload.payer_id,
+        created_by_id=user.id,
         amount_cents=payload.amount_cents,
         split_type=payload.split_type,
         category=payload.category,
@@ -154,7 +158,13 @@ async def update_expense(
     db: Session = Depends(get_db),
 ) -> ExpenseOut:
     expense = _load_expense(db, expense_id)
-    get_membership(db, expense.group_id, user.id)
+    require_expense_mutator(
+        db,
+        expense.group_id,
+        user,
+        payer_id=expense.payer_id,
+        created_by_id=expense.created_by_id,
+    )
     group = get_group_or_404(db, expense.group_id)
     if group.status == GroupStatus.closed:
         raise HTTPException(status_code=400, detail="Group is closed")
@@ -218,7 +228,13 @@ async def delete_expense(
     db: Session = Depends(get_db),
 ) -> dict:
     expense = _load_expense(db, expense_id)
-    get_membership(db, expense.group_id, user.id)
+    require_expense_mutator(
+        db,
+        expense.group_id,
+        user,
+        payer_id=expense.payer_id,
+        created_by_id=expense.created_by_id,
+    )
     group = get_group_or_404(db, expense.group_id)
     if group.status == GroupStatus.closed:
         raise HTTPException(status_code=400, detail="Group is closed")
@@ -243,6 +259,23 @@ async def delete_expense(
     return {"ok": True}
 
 
+@router.get("/expenses/{expense_id}/receipt")
+def download_receipt(
+    expense_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    settings = get_settings()
+    expense = _load_expense(db, expense_id)
+    get_membership(db, expense.group_id, user.id)
+    if not expense.receipt_path:
+        raise HTTPException(status_code=404, detail="No receipt")
+    path = Path(settings.upload_dir) / expense.receipt_path
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Receipt file missing")
+    return FileResponse(path, filename=path.name)
+
+
 @router.post("/expenses/{expense_id}/receipt", response_model=ExpenseOut)
 async def upload_receipt(
     expense_id: int,
@@ -250,14 +283,28 @@ async def upload_receipt(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ExpenseOut:
+    settings = get_settings()
     expense = _load_expense(db, expense_id)
-    get_membership(db, expense.group_id, user.id)
+    require_expense_mutator(
+        db,
+        expense.group_id,
+        user,
+        payer_id=expense.payer_id,
+        created_by_id=expense.created_by_id,
+    )
+    suffix = Path(file.filename or "receipt.bin").suffix.lower()
+    if suffix not in ALLOWED_RECEIPT_SUFFIXES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type. Allowed: {', '.join(sorted(ALLOWED_RECEIPT_SUFFIXES))}",
+        )
+    content = await file.read()
+    if len(content) > settings.max_upload_bytes:
+        raise HTTPException(status_code=400, detail="Receipt file too large (max 5MB)")
     upload_root = Path(settings.upload_dir)
     upload_root.mkdir(parents=True, exist_ok=True)
-    suffix = Path(file.filename or "receipt.bin").suffix or ".bin"
     name = f"{expense_id}_{uuid.uuid4().hex}{suffix}"
     dest = upload_root / name
-    content = await file.read()
     dest.write_bytes(content)
     expense.receipt_path = name
     db.commit()

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { api, setToken, getToken } from '../api'
+import { api, setToken } from '../api'
 import type { User } from '../types'
 
 export const useAuthStore = defineStore('auth', () => {
@@ -10,15 +10,19 @@ export const useAuthStore = defineStore('auth', () => {
   const isAuthenticated = computed(() => !!user.value)
 
   async function bootstrap() {
-    if (!getToken()) {
-      ready.value = true
-      return
-    }
     try {
-      user.value = await api<User>('/api/auth/me')
+      const refreshed = await api<{ access_token: string; user: User }>('/api/auth/refresh', {
+        method: 'POST',
+      })
+      setToken(refreshed.access_token)
+      user.value = refreshed.user
     } catch {
-      setToken(null)
-      user.value = null
+      try {
+        user.value = await api<User>('/api/auth/me')
+      } catch {
+        setToken(null)
+        user.value = null
+      }
     } finally {
       ready.value = true
     }
@@ -42,16 +46,21 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = res.user
   }
 
-  async function loginWithGoogle(credential: string) {
+  async function loginWithGoogle(credential: string, password?: string) {
     const res = await api<{ access_token: string; user: User }>('/api/auth/google', {
       method: 'POST',
-      body: JSON.stringify({ credential }),
+      body: JSON.stringify({ credential, password: password || null }),
     })
     setToken(res.access_token)
     user.value = res.user
   }
 
-  function logout() {
+  async function logout() {
+    try {
+      await api('/api/auth/logout', { method: 'POST' })
+    } catch {
+      /* ignore */
+    }
     setToken(null)
     user.value = null
   }

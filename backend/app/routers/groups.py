@@ -17,7 +17,7 @@ from app.schemas import (
     MessageOut,
 )
 from app.services.activity_service import log_activity
-from app.services.mail_stub import send_email
+from app.services.mail import send_email
 from app.services.reminder_service import send_group_close_report
 from app.ws import manager
 
@@ -132,6 +132,8 @@ def join_by_token(
     group = db.query(Group).filter(Group.invite_token == invite_token).first()
     if not group:
         raise HTTPException(status_code=404, detail="Invite not found")
+    if group.status == GroupStatus.closed:
+        raise HTTPException(status_code=400, detail="Group is closed")
     existing = (
         db.query(GroupMember)
         .filter(GroupMember.group_id == group.id, GroupMember.user_id == user.id)
@@ -177,7 +179,7 @@ def invite_by_email(
         payload={"email": payload.email.lower()},
     )
     db.commit()
-    return MessageOut(message="Invite email written to stub outbox")
+    return MessageOut(message="Invite email sent")
 
 
 @router.post("/{group_id}/close", response_model=GroupOut)

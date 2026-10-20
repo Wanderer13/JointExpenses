@@ -9,7 +9,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from app.database import Base, SessionLocal, engine
+from app.bootstrap import run_migrations
+from app.database import SessionLocal
 from app.models import (
     Expense,
     ExpenseSplit,
@@ -27,7 +28,7 @@ import secrets
 
 
 def main() -> None:
-    Base.metadata.create_all(bind=engine)
+    run_migrations()
     db = SessionLocal()
     try:
         if db.query(User).filter(User.email == "alice@example.com").first():
@@ -71,6 +72,7 @@ def main() -> None:
         e1 = Expense(
             group_id=group.id,
             payer_id=alice.id,
+            created_by_id=alice.id,
             amount_cents=10000,
             split_type=SplitType.equal,
             category="food",
@@ -86,6 +88,7 @@ def main() -> None:
         e2 = Expense(
             group_id=group.id,
             payer_id=bob.id,
+            created_by_id=bob.id,
             amount_cents=4500,
             split_type=SplitType.exact,
             category="transport",

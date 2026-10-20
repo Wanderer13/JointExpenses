@@ -1,6 +1,6 @@
 # Decision log — Shared Expenses
 
-Timestamps in local time (UTC+4), 2026-10-19.
+Timestamps in local time (UTC+4), 2026-10-19–20.
 
 ## Timeline
 
@@ -13,31 +13,36 @@ Timestamps in local time (UTC+4), 2026-10-19.
 | 17:54 | Installed Node.js LTS (was missing); scaffolded Vue manually |
 | 17:56 | Vue UI: login, groups, group detail (tabs), balances, notifications, join |
 | 17:58 | `pytest` passed; seed demo users; README / this log |
+| 2026-10-20 | Google Sign-In; one currency per group + selector; clearer split types |
+| 2026-10-20 | Production pass: expense edit UI, Alembic, SMTP, cookies/refresh, authz, Compose web+CI |
 
 ## Key decisions
 
-1. **SQLite by default, Postgres via compose** — Docker was unavailable on the dev machine; SQLite meets the “fast local run” requirement, Postgres remains the target option in compose.
-2. **Balances as derived state** — nets are computed from expenses + confirmed settlements; no debt cache table → expense edit/delete stays consistent with settlements.
-3. **Cents + deterministic leftover rule** — equal split: leftover cents go to the first participants by ascending `user_id` (see README).
-4. **Debt simplification = greedy** — classic debtor/creditor matching; enough for the demo and the `sum(nets) == 0` invariant.
-5. **Settlements need recipient confirm** — pending ones are visible; only `confirmed` affect balances.
-6. **Email stub to filesystem** — `backend/mail_outbox/*.json` instead of SMTP (allowed by the assignment).
-7. **WebSocket per group** — for two tabs; broadcast `balances_updated` after mutations.
-8. **Auth: JWT login/password + optional Google** — email/password remains the default; Google Sign-In added via GIS ID tokens (`POST /api/auth/google`), not a full OAuth redirect.
-9. **One currency per group** — curated ISO-4217 allowlist (frontend selector + backend validation); create form suggests from browser locale; owner can change currency (display only, no FX conversion).
+1. **SQLite by default, Postgres via compose** — fast local run; Postgres is the production DB in Compose.
+2. **Balances as derived state** — nets from expenses + confirmed settlements; no debt cache table.
+3. **Cents + deterministic leftover rule** — equal split leftover by ascending `user_id`.
+4. **Debt simplification = greedy** — classic debtor/creditor matching; `sum(nets) == 0`.
+5. **Settlements need recipient confirm** — only `confirmed` affect balances; amount capped to suggested debt.
+6. **Email: stub or SMTP** — filesystem outbox for demos; real SMTP via env for production.
+7. **WebSocket per group** — broadcast `balances_updated` after mutations.
+8. **Auth: JWT access + refresh cookies** — httpOnly cookies (Bearer still accepted); Google GIS ID tokens with password-gated account linking.
+9. **One currency per group** — curated ISO allowlist; display-only currency changes (no FX).
+10. **Expense mutations** — payer, creator (`created_by_id`), or group owner only.
+11. **Receipts** — authenticated download endpoint; public `/uploads` mount removed; 5MB + type allowlist.
+12. **Alembic** — `python -m app.bootstrap` / Docker CMD runs `alembic upgrade head` instead of ad-hoc `create_all`.
+13. **Compose** — `db` + `api` + `web` (nginx SPA); secrets from `.env` (no hardcoded production secrets).
 
 ## Packages (why)
 
-- FastAPI — typed APIs, OpenAPI, WebSockets out of the box
-- SQLAlchemy 2 — ORM + simple `create_all` for the demo
-- Vue 3 + Pinia + Vue Router — frontend stack required by the brief
+- FastAPI — typed APIs, OpenAPI, WebSockets
+- SQLAlchemy 2 + Alembic — ORM + real migrations
+- Vue 3 + Pinia + Vue Router — frontend stack from the brief
 - APScheduler — periodic reminder emails
-- passlib/bcrypt + python-jose — standard JWT stack
-- google-auth + requests — verify Google ID tokens for Sign-In
+- passlib/bcrypt + python-jose — JWT stack
+- google-auth + requests — verify Google ID tokens
 
 ## Not done (intentionally)
 
-- Real SMTP / S3
-- Expense edit UI (API ready)
-- Alembic revision chain for production deploys
-- Google OAuth authorization-code redirect / “set password” for Google-only users
+- S3 / object storage for receipts
+- Password set/reset UI for Google-only users
+- Full HA / multi-region / CDN

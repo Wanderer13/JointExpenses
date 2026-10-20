@@ -99,6 +99,7 @@ class Expense(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     group_id: Mapped[int] = mapped_column(ForeignKey("groups.id", ondelete="CASCADE"), index=True)
     payer_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    created_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     amount_cents: Mapped[int] = mapped_column(Integer)
     split_type: Mapped[SplitType] = mapped_column(
         Enum(SplitType, native_enum=False), default=SplitType.equal
@@ -114,6 +115,7 @@ class Expense(Base):
 
     group: Mapped[Group] = relationship(back_populates="expenses")
     payer: Mapped[User] = relationship(foreign_keys=[payer_id])
+    created_by: Mapped[User] = relationship(foreign_keys=[created_by_id])
     splits: Mapped[list[ExpenseSplit]] = relationship(
         back_populates="expense", cascade="all, delete-orphan"
     )
@@ -190,3 +192,16 @@ class ReminderSent(Base):
     debtor_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     creditor_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class RefreshToken(Base):
+    __tablename__ = "refresh_tokens"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    user: Mapped[User] = relationship()

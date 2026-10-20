@@ -1,12 +1,12 @@
 # Shared Expenses (Task 6)
 
-A client–server app for shared expenses: groups, expenses with multiple split types, balances, debt simplification, settlements with confirmation, activity feed, debtor reminders (stub email), and group closing with a final report.
+A client–server app for shared expenses: groups, expenses with multiple split types, balances, debt simplification, settlements with confirmation, activity feed, debtor reminders, and group closing with a final report.
 
 ## Stack
 
-- **Backend:** Python 3.12+, FastAPI, SQLAlchemy 2, JWT auth, APScheduler
-- **Frontend:** Vue 3 + Vite + TypeScript + Pinia + Vue Router
-- **DB:** SQLite by default (fast local run); PostgreSQL via `docker compose`
+- **Backend:** Python 3.12+, FastAPI, SQLAlchemy 2, Alembic, JWT + refresh cookies, APScheduler
+- **Frontend:** Vue 3 + Vite + TypeScript + Pinia + Vue Router (nginx in production)
+- **DB:** SQLite for local/dev; PostgreSQL via Docker Compose
 
 ## Cent leftover rule (equal split)
 
@@ -18,6 +18,21 @@ Amounts are stored in integer cents. For equal splits:
 
 Split parts always sum to the expense total.
 
+## Production run (Docker Compose)
+
+1. Copy [`.env.example`](.env.example) to `.env` and set strong `SECRET_KEY` and `POSTGRES_PASSWORD`.
+2. Optionally set `MAIL_BACKEND=smtp` and SMTP_* for real email (default is filesystem stub).
+3. Build and start:
+
+```bash
+docker compose up --build
+```
+
+UI: http://localhost:8080 (or `WEB_PORT`)  
+API health (via nginx): http://localhost:8080/api/health
+
+Put a TLS reverse proxy in front of `web` for real HTTPS and set `COOKIE_SECURE=true`.
+
 ## Local run (without Docker)
 
 ### Backend
@@ -25,6 +40,7 @@ Split parts always sum to the expense total.
 ```bash
 cd backend
 python -m pip install -r requirements.txt
+python -m app.bootstrap
 python scripts/seed.py
 python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
@@ -47,7 +63,7 @@ UI: http://127.0.0.1:5173
 Email/password auth always works. To enable **Continue with Google**:
 
 1. In [Google Cloud Console](https://console.cloud.google.com/) create an OAuth client of type **Web application**.
-2. Under **Authorized JavaScript origins**, add `http://localhost:5173` and `http://127.0.0.1:5173`.
+2. Under **Authorized JavaScript origins**, add your UI origins (e.g. `http://localhost:5173`, `http://localhost:8080`).
 3. Set the same client ID in both places:
 
 ```bash
@@ -58,7 +74,7 @@ GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 VITE_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 ```
 
-4. Restart API and Vite. The Google button appears on the login/register page. Without these env vars, the button is hidden.
+If Google Sign-In hits an existing email/password account, enter that password in the form and retry — accounts are linked only after password proof.
 
 ### Demo users (after seed)
 
@@ -68,42 +84,38 @@ VITE_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 | bob@example.com | password123 |
 | cara@example.com | password123 |
 
-## Run with PostgreSQL (Docker)
-
-```bash
-docker compose up --build
-cd frontend && npm install && npm run dev
-```
-
-`DATABASE_URL` for the API in compose points at PostgreSQL. Without Docker, the app uses the SQLite file `backend/expenses.db`.
-
 ## What works
 
-- Registration / login (JWT), optional Google Sign-In (GIS ID token)
-- Groups: create, members, invite by link and email (stub), close/reopen; one currency per group (selector + locale suggestion)
-- Expenses: equal / shares / exact, category, date, comment, receipt file
+- Registration / login (JWT in httpOnly cookies + Bearer), refresh/logout, optional Google Sign-In
+- Groups: create, members, invite by link and email, close/reopen; one currency per group
+- Expenses: equal / shares / exact, category, date, comment, receipt; **create / edit / delete** (payer, creator, or owner)
 - Balances per group and across all groups; suggested transfers (greedy)
-- Settlements: pending → confirm/reject by recipient; only confirmed affect balances
+- Settlements: pending → confirm/reject by recipient; amount capped to outstanding debt; only confirmed affect balances
 - Activity feed and notifications
 - WebSocket updates for balances/feed with two browser tabs open
-- Reminder job: emails written to `backend/mail_outbox/` at most once per week
-- On group close — final report emailed (stub) to all members
-- Unit tests: split, balances/settlements, security, mail stub, API flows — `cd backend && python -m pytest`
+- Reminder job: SMTP or stub outbox at most once per week
+- On group close — final report emailed (SMTP or stub) to all members
+- Alembic migrations on API bootstrap; authenticated receipt download; upload size/type limits
+- Unit tests + CI: `cd backend && python -m pytest`; frontend `npm run build` (includes `vue-tsc`)
+
+## Mail
+
+- `MAIL_BACKEND=stub` (default): JSON files under `backend/mail_outbox/`
+- `MAIL_BACKEND=smtp`: real SMTP via `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_TLS`
 
 ## Out of scope / next steps
 
-- Real SMTP and object storage for receipts
-- FX rates / multiple currencies inside a single group (each group has one currency)
-- Expense edit UI (API `PATCH /api/expenses/{id}` already exists)
-- Alembic migrations instead of `create_all` for production
+- Object storage (S3) for receipts instead of a local volume
+- FX rates / multiple currencies inside a single group
+- Password set/reset UI for Google-only users
 - Richer mobile layout / PWA
 
 ## Honest status
 
-The project demonstrates the full Task 6 happy path on SQLite locally. Docker Compose is set up for PostgreSQL; if Docker is unavailable on the machine, use the SQLite mode above. External email is emulated with files in `backend/mail_outbox/`.
+Task 6 happy path works locally on SQLite and via Compose (Postgres + API + nginx UI). External email defaults to the stub outbox unless SMTP is configured. Put TLS in front of Compose for production HTTPS.
 
 ## How it was built
 
-Cursor agent + Composer. Reasons: fast FastAPI/Vue scaffolding, iterating on business rules (cents, settlements, WS), easy local run without heavy infrastructure.
+Cursor agent + Composer. Reasons: fast FastAPI/Vue scaffolding, iterating on business rules (cents, settlements, WS), deployable Compose stack with migrations and cookie auth.
 
 See also [DECISION_LOG.md](DECISION_LOG.md).

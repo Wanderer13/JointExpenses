@@ -6,14 +6,13 @@ from pathlib import Path
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
 
 from app.config import get_settings
-from app.database import Base, SessionLocal, engine
+from app.database import SessionLocal, engine
 from app.deps import get_membership
-from app.migrate import migrate_schema
 from app.routers import activity, auth, balances, expenses, groups, notifications, settlements
-from app.security import decode_token, get_user_by_id
+from app.security import ACCESS_COOKIE, decode_token, get_user_by_id
 from app.services.reminder_service import process_debt_reminders
 from app.ws import manager
 
@@ -36,8 +35,6 @@ def _run_reminders() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _ensure_dirs()
-    Base.metadata.create_all(bind=engine)
-    migrate_schema(engine)
     scheduler = AsyncIOScheduler()
     scheduler.add_job(_run_reminders, "interval", seconds=settings.reminder_check_seconds, id="reminders")
     scheduler.start()
@@ -63,17 +60,20 @@ app.include_router(settlements.router, prefix="/api")
 app.include_router(activity.router, prefix="/api")
 app.include_router(notifications.router, prefix="/api")
 
-app.mount("/uploads", StaticFiles(directory=settings.upload_dir), name="uploads")
-
 
 @app.get("/api/health")
 def health() -> dict:
-    return {"status": "ok"}
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return {"status": "ok", "database": "ok"}
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=503, detail=f"database unavailable: {exc}") from exc
 
 
 @app.websocket("/ws/groups/{group_id}")
 async def group_ws(websocket: WebSocket, group_id: int) -> None:
-    token = websocket.query_params.get("token")
+    token = websocket.query_params.get("token") or websocket.cookies.get(ACCESS_COOKIE)
     if not token:
         await websocket.close(code=4401)
         return

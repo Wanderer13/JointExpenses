@@ -22,7 +22,9 @@ def _auth_header(token: str) -> dict[str, str]:
 
 
 def test_health(client):
-    assert client.get("/api/health").json() == {"status": "ok"}
+    body = client.get("/api/health").json()
+    assert body["status"] == "ok"
+    assert body["database"] == "ok"
 
 
 def test_register_login_me(client):
@@ -332,7 +334,12 @@ def test_google_auth_links_existing_email(client, google_client_id):
         "iss": "https://accounts.google.com",
     }
     with patch("app.routers.auth.verify_google_id_token", return_value=claims):
-        res = client.post("/api/auth/google", json={"credential": "fake-id-token"})
+        blocked = client.post("/api/auth/google", json={"credential": "fake-id-token"})
+        assert blocked.status_code == 409
+        res = client.post(
+            "/api/auth/google",
+            json={"credential": "fake-id-token", "password": "password123"},
+        )
     assert res.status_code == 200
     assert res.json()["user"]["id"] == created["user"]["id"]
 

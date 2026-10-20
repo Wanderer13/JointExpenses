@@ -1,0 +1,8 @@
+# Optional local overrides. Copy to docker-compose.override.yml (gitignored by convention).
+services:
+  api:
+    ports:
+      - "8000:8000"
+    environment:
+      APP_ENV: development
+      MAIL_BACKEND: stub
