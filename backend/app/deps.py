@@ -2,9 +2,10 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+from app.constants import ACCESS_COOKIE
 from app.database import get_db
 from app.models import Group, GroupMember, MemberRole, User
-from app.security import ACCESS_COOKIE, decode_token, get_user_by_id
+from app.security import decode_token, get_user_by_id
 
 bearer = HTTPBearer(auto_error=False)
 

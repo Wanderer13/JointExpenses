@@ -8,14 +8,15 @@ from email.message import EmailMessage
 from pathlib import Path
 
 from app.config import get_settings
+from app.constants import MAIL_BACKEND_SMTP, MAIL_BACKEND_STUB
 
 logger = logging.getLogger(__name__)
 
 
 def send_email(to: str, subject: str, body: str, meta: dict | None = None) -> Path | None:
     settings = get_settings()
-    backend = (settings.mail_backend or "stub").lower()
-    if backend == "smtp":
+    backend = (settings.mail_backend or MAIL_BACKEND_STUB).lower()
+    if backend == MAIL_BACKEND_SMTP:
         _send_smtp(to, subject, body)
         return None
     return _send_stub(to, subject, body, meta)

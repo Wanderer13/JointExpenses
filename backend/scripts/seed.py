@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.bootstrap import run_migrations
+from app.constants import DEFAULT_CURRENCY, DEFAULT_REMINDER_DAYS, INVITE_TOKEN_BYTES
 from app.database import SessionLocal
 from app.models import (
     Expense,
@@ -43,10 +44,10 @@ def main() -> None:
 
         group = Group(
             name="Weekend Trip",
-            currency="USD",
-            reminder_days=7,
+            currency=DEFAULT_CURRENCY,
+            reminder_days=DEFAULT_REMINDER_DAYS,
             status=GroupStatus.open,
-            invite_token=secrets.token_urlsafe(24),
+            invite_token=secrets.token_urlsafe(INVITE_TOKEN_BYTES),
             created_by_id=alice.id,
         )
         db.add(group)

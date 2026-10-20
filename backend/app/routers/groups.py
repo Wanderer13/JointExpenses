@@ -5,6 +5,7 @@ import secrets
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 
+from app.constants import INVITE_TOKEN_BYTES, EventType, WsMessageType
 from app.database import get_db
 from app.deps import get_current_user, get_group_or_404, get_membership
 from app.models import Group, GroupMember, GroupStatus, MemberRole, User
@@ -75,7 +76,7 @@ def create_group(
         currency=payload.currency.upper(),
         reminder_days=payload.reminder_days,
         status=GroupStatus.open,
-        invite_token=secrets.token_urlsafe(24),
+        invite_token=secrets.token_urlsafe(INVITE_TOKEN_BYTES),
         created_by_id=user.id,
     )
     db.add(group)
@@ -85,7 +86,7 @@ def create_group(
         db,
         group_id=group.id,
         actor_id=user.id,
-        event_type="group_created",
+        event_type=EventType.GROUP_CREATED,
         payload={"name": group.name},
     )
     db.commit()
@@ -145,7 +146,7 @@ def join_by_token(
             db,
             group_id=group.id,
             actor_id=user.id,
-            event_type="member_joined",
+            event_type=EventType.MEMBER_JOINED,
             payload={"user_id": user.id, "name": user.name},
         )
         db.commit()
@@ -175,7 +176,7 @@ def invite_by_email(
         db,
         group_id=group.id,
         actor_id=user.id,
-        event_type="invite_sent",
+        event_type=EventType.INVITE_SENT,
         payload={"email": payload.email.lower()},
     )
     db.commit()
@@ -200,11 +201,13 @@ async def close_group(
         db,
         group_id=group.id,
         actor_id=user.id,
-        event_type="group_closed",
+        event_type=EventType.GROUP_CLOSED,
         payload={},
     )
     db.commit()
-    await manager.broadcast(group_id, {"type": "group_updated", "group_id": group_id})
+    await manager.broadcast(
+        group_id, {"type": WsMessageType.GROUP_UPDATED, "group_id": group_id}
+    )
     return _group_out(_load_group(db, group_id))
 
 
@@ -223,9 +226,11 @@ async def reopen_group(
         db,
         group_id=group.id,
         actor_id=user.id,
-        event_type="group_reopened",
+        event_type=EventType.GROUP_REOPENED,
         payload={},
     )
     db.commit()
-    await manager.broadcast(group_id, {"type": "group_updated", "group_id": group_id})
+    await manager.broadcast(
+        group_id, {"type": WsMessageType.GROUP_UPDATED, "group_id": group_id}
+    )
     return _group_out(_load_group(db, group_id))

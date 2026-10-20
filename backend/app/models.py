@@ -16,6 +16,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.constants import DEFAULT_CATEGORY, DEFAULT_CURRENCY, DEFAULT_REMINDER_DAYS
 from app.database import Base
 
 
@@ -60,8 +61,8 @@ class Group(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(200))
-    currency: Mapped[str] = mapped_column(String(8), default="USD")
-    reminder_days: Mapped[int] = mapped_column(Integer, default=7)
+    currency: Mapped[str] = mapped_column(String(8), default=DEFAULT_CURRENCY)
+    reminder_days: Mapped[int] = mapped_column(Integer, default=DEFAULT_REMINDER_DAYS)
     status: Mapped[GroupStatus] = mapped_column(
         Enum(GroupStatus, native_enum=False), default=GroupStatus.open
     )
@@ -104,7 +105,7 @@ class Expense(Base):
     split_type: Mapped[SplitType] = mapped_column(
         Enum(SplitType, native_enum=False), default=SplitType.equal
     )
-    category: Mapped[str] = mapped_column(String(80), default="general")
+    category: Mapped[str] = mapped_column(String(80), default=DEFAULT_CATEGORY)
     expense_date: Mapped[date] = mapped_column(Date)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     receipt_path: Mapped[str | None] = mapped_column(String(500), nullable=True)

@@ -6,6 +6,7 @@ from collections import defaultdict, deque
 from fastapi import HTTPException, Request, status
 
 from app.config import get_settings
+from app.constants import AUTH_RATE_WINDOW_SECONDS
 
 _buckets: dict[str, deque[float]] = defaultdict(deque)
 
@@ -18,9 +19,8 @@ def check_auth_rate_limit(request: Request) -> None:
     client = request.client.host if request.client else "unknown"
     key = f"auth:{client}"
     now = time.monotonic()
-    window = 60.0
     bucket = _buckets[key]
-    while bucket and now - bucket[0] > window:
+    while bucket and now - bucket[0] > AUTH_RATE_WINDOW_SECONDS:
         bucket.popleft()
     if len(bucket) >= limit:
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many auth attempts")

@@ -5,6 +5,7 @@ import json
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session, joinedload
 
+from app.constants import FEED_PAGE_LIMIT
 from app.database import get_db
 from app.deps import get_current_user, get_membership
 from app.models import ActivityEvent, User
@@ -25,7 +26,7 @@ def group_activity(
         .options(joinedload(ActivityEvent.actor))
         .filter(ActivityEvent.group_id == group_id)
         .order_by(ActivityEvent.created_at.desc())
-        .limit(100)
+        .limit(FEED_PAGE_LIMIT)
         .all()
     )
     result = []

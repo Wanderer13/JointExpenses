@@ -1,3 +1,5 @@
+import { DEFAULT_CURRENCY } from './constants'
+
 export interface CurrencyOption {
   code: string
   label: string
@@ -51,7 +53,7 @@ export function currencyLabel(code: string): string {
   return found ? `${found.code} — ${found.label}` : code
 }
 
-/** Suggest a group currency from the browser locale; fall back to USD. */
+/** Suggest a group currency from the browser locale; fall back to DEFAULT_CURRENCY. */
 export function suggestCurrency(): string {
   try {
     const code = Intl.NumberFormat().resolvedOptions().currency?.toUpperCase()
@@ -59,5 +61,5 @@ export function suggestCurrency(): string {
   } catch {
     /* ignore */
   }
-  return 'USD'
+  return DEFAULT_CURRENCY
 }

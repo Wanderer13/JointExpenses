@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session, joinedload
 
+from app.constants import DAYS_PER_WEEK, EventType, format_money_major
 from app.models import Group, GroupMember, GroupStatus, ReminderSent, User
 from app.services.balance_service import group_balances_payload, oldest_debt_age_days
 from app.services.mail import send_email
@@ -14,7 +15,7 @@ def process_debt_reminders(db: Session) -> int:
     sent_count = 0
     groups = db.query(Group).filter(Group.status == GroupStatus.open).all()
     now = datetime.now(timezone.utc)
-    week_ago = now - timedelta(days=7)
+    week_ago = now - timedelta(days=DAYS_PER_WEEK)
 
     for group in groups:
         payload = group_balances_payload(db, group)
@@ -47,13 +48,12 @@ def process_debt_reminders(db: Session) -> int:
             if not debtor or not creditor:
                 continue
 
-            amount_major = amount / 100
             send_email(
                 to=debtor.email,
                 subject=f'Reminder: debt in group "{group.name}"',
                 body=(
                     f"Hello {debtor.name},\n\n"
-                    f"You still owe {creditor.name} {amount_major:.2f} {group.currency} "
+                    f"You still owe {creditor.name} {format_money_major(amount)} {group.currency} "
                     f'in group "{group.name}" (debt older than {group.reminder_days} days).\n'
                 ),
                 meta={
@@ -91,7 +91,9 @@ def send_group_close_report(db: Session, group: Group) -> None:
     payload = group_balances_payload(db, group)
     lines = ["Final balances:"]
     for net in payload["nets"]:
-        lines.append(f"- {net['name']}: {net['balance_cents'] / 100:.2f} {group.currency}")
+        lines.append(
+            f"- {net['name']}: {format_money_major(net['balance_cents'])} {group.currency}"
+        )
     lines.append("")
     lines.append("Suggested transfers:")
     if not payload["suggested_transfers"]:
@@ -99,7 +101,8 @@ def send_group_close_report(db: Session, group: Group) -> None:
     else:
         for t in payload["suggested_transfers"]:
             lines.append(
-                f"- {t['from_name']} → {t['to_name']}: {t['amount_cents'] / 100:.2f} {group.currency}"
+                f"- {t['from_name']} → {t['to_name']}: "
+                f"{format_money_major(t['amount_cents'])} {group.currency}"
             )
     body = "\n".join(lines)
     for member in members:
@@ -107,5 +110,5 @@ def send_group_close_report(db: Session, group: Group) -> None:
             to=member.user.email,
             subject=f'Group "{group.name}" closed — final report',
             body=body,
-            meta={"group_id": group.id, "event": "group_closed"},
+            meta={"group_id": group.id, "event": EventType.GROUP_CLOSED},
         )

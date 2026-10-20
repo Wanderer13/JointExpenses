@@ -2,14 +2,19 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
+from app.constants import (
+    ACCESS_COOKIE,
+    GOOGLE_LINK_PASSWORD_REQUIRED,
+    REFRESH_COOKIE,
+    SECONDS_PER_DAY,
+    SECONDS_PER_MINUTE,
+)
 from app.database import get_db
 from app.deps import get_current_user
 from app.models import User
 from app.rate_limit import check_auth_rate_limit
 from app.schemas import GoogleAuthIn, MessageOut, TokenOut, UserCreate, UserLogin, UserOut
 from app.security import (
-    ACCESS_COOKIE,
-    REFRESH_COOKIE,
     cookie_kwargs,
     create_access_token,
     hash_password,
@@ -29,13 +34,13 @@ def _set_auth_cookies(response: Response, access: str, refresh: str) -> None:
     response.set_cookie(
         ACCESS_COOKIE,
         access,
-        max_age=settings.access_token_expire_minutes * 60,
+        max_age=settings.access_token_expire_minutes * SECONDS_PER_MINUTE,
         **kwargs,
     )
     response.set_cookie(
         REFRESH_COOKIE,
         refresh,
-        max_age=settings.refresh_token_expire_days * 24 * 3600,
+        max_age=settings.refresh_token_expire_days * SECONDS_PER_DAY,
         **kwargs,
     )
 
@@ -126,7 +131,7 @@ def google_auth(
             if not payload.password:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
-                    detail="Account exists — provide password to link Google Sign-In",
+                    detail=GOOGLE_LINK_PASSWORD_REQUIRED,
                 )
             if user.password_hash is None or not verify_password(payload.password, user.password_hash):
                 raise HTTPException(

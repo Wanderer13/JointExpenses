@@ -5,6 +5,15 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
+from app.constants import (
+    DEFAULT_CATEGORY,
+    DEFAULT_CURRENCY,
+    DEFAULT_REMINDER_DAYS,
+    MAX_PASSWORD_LENGTH,
+    MAX_REMINDER_DAYS,
+    MIN_PASSWORD_LENGTH,
+    MIN_REMINDER_DAYS,
+)
 from app.currencies import is_allowed_currency, normalize_currency
 from app.models import GroupStatus, MemberRole, SettlementStatus, SplitType
 
@@ -12,7 +21,7 @@ from app.models import GroupStatus, MemberRole, SettlementStatus, SplitType
 class UserCreate(BaseModel):
     email: EmailStr
     name: str = Field(min_length=1, max_length=120)
-    password: str = Field(min_length=6, max_length=128)
+    password: str = Field(min_length=MIN_PASSWORD_LENGTH, max_length=MAX_PASSWORD_LENGTH)
 
 
 class UserLogin(BaseModel):
@@ -22,7 +31,9 @@ class UserLogin(BaseModel):
 
 class GoogleAuthIn(BaseModel):
     credential: str = Field(min_length=1)
-    password: str | None = Field(default=None, min_length=6, max_length=128)
+    password: str | None = Field(
+        default=None, min_length=MIN_PASSWORD_LENGTH, max_length=MAX_PASSWORD_LENGTH
+    )
 
 
 class UserOut(BaseModel):
@@ -41,8 +52,10 @@ class TokenOut(BaseModel):
 
 class GroupCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
-    currency: str = Field(default="USD", min_length=3, max_length=8)
-    reminder_days: int = Field(default=7, ge=1, le=365)
+    currency: str = Field(default=DEFAULT_CURRENCY, min_length=3, max_length=8)
+    reminder_days: int = Field(
+        default=DEFAULT_REMINDER_DAYS, ge=MIN_REMINDER_DAYS, le=MAX_REMINDER_DAYS
+    )
 
     @field_validator("currency")
     @classmethod
@@ -56,7 +69,9 @@ class GroupCreate(BaseModel):
 class GroupUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     currency: str | None = Field(default=None, min_length=3, max_length=8)
-    reminder_days: int | None = Field(default=None, ge=1, le=365)
+    reminder_days: int | None = Field(
+        default=None, ge=MIN_REMINDER_DAYS, le=MAX_REMINDER_DAYS
+    )
 
     @field_validator("currency")
     @classmethod
@@ -106,7 +121,7 @@ class ExpenseCreate(BaseModel):
     amount_cents: int = Field(gt=0)
     split_type: SplitType
     participants: list[SplitParticipantIn] = Field(min_length=1)
-    category: str = "general"
+    category: str = DEFAULT_CATEGORY
     expense_date: date
     comment: str | None = None
 

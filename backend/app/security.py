@@ -9,12 +9,16 @@ from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
+from app.constants import (
+    ACCESS_COOKIE,
+    JWT_ALGORITHM,
+    REFRESH_COOKIE,
+    REFRESH_TOKEN_BYTES,
+    TOKEN_TYPE_ACCESS,
+)
 from app.models import RefreshToken, User
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-ALGORITHM = "HS256"
-ACCESS_COOKIE = "se_access"
-REFRESH_COOKIE = "se_refresh"
 
 
 def hash_password(password: str) -> str:
@@ -28,14 +32,18 @@ def verify_password(password: str, password_hash: str) -> bool:
 def create_access_token(user_id: int) -> str:
     settings = get_settings()
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
-    return jwt.encode({"sub": str(user_id), "exp": expire, "type": "access"}, settings.secret_key, algorithm=ALGORITHM)
+    return jwt.encode(
+        {"sub": str(user_id), "exp": expire, "type": TOKEN_TYPE_ACCESS},
+        settings.secret_key,
+        algorithm=JWT_ALGORITHM,
+    )
 
 
 def decode_token(token: str) -> int | None:
     settings = get_settings()
     try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
-        if payload.get("type") not in (None, "access"):
+        payload = jwt.decode(token, settings.secret_key, algorithms=[JWT_ALGORITHM])
+        if payload.get("type") not in (None, TOKEN_TYPE_ACCESS):
             return None
         sub = payload.get("sub")
         if sub is None:
@@ -55,7 +63,7 @@ def hash_refresh_token(raw: str) -> str:
 
 def issue_refresh_token(db: Session, user_id: int) -> str:
     settings = get_settings()
-    raw = secrets.token_urlsafe(48)
+    raw = secrets.token_urlsafe(REFRESH_TOKEN_BYTES)
     token = RefreshToken(
         user_id=user_id,
         token_hash=hash_refresh_token(raw),
@@ -101,3 +109,18 @@ def cookie_kwargs() -> dict:
         "samesite": "lax",
         "path": "/",
     }
+
+
+__all__ = [
+    "ACCESS_COOKIE",
+    "REFRESH_COOKIE",
+    "hash_password",
+    "verify_password",
+    "create_access_token",
+    "decode_token",
+    "get_user_by_id",
+    "issue_refresh_token",
+    "revoke_refresh_token",
+    "rotate_refresh_token",
+    "cookie_kwargs",
+]

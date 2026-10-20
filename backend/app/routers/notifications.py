@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.constants import FEED_PAGE_LIMIT
 from app.database import get_db
 from app.deps import get_current_user
 from app.models import Notification, User
@@ -23,7 +24,7 @@ def list_notifications(
         db.query(Notification)
         .filter(Notification.user_id == user.id)
         .order_by(Notification.created_at.desc())
-        .limit(100)
+        .limit(FEED_PAGE_LIMIT)
         .all()
     )
     result = []

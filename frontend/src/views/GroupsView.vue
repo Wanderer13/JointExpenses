@@ -2,13 +2,14 @@
 import { onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { api } from '../api'
+import { DEFAULT_REMINDER_DAYS, GROUP_STATUS, MAX_REMINDER_DAYS, MIN_REMINDER_DAYS } from '../constants'
 import { CURRENCIES, suggestCurrency } from '../currencies'
 import type { Group } from '../types'
 
 const groups = ref<Group[]>([])
 const name = ref('')
 const currency = ref(suggestCurrency())
-const reminderDays = ref(7)
+const reminderDays = ref(DEFAULT_REMINDER_DAYS)
 const error = ref('')
 const loading = ref(false)
 
@@ -55,7 +56,7 @@ onMounted(load)
         >
           <div class="row" style="justify-content: space-between">
             <strong>{{ g.name }}</strong>
-            <span class="badge" :class="{ closed: g.status === 'closed' }">{{ g.status }}</span>
+            <span class="badge" :class="{ closed: g.status === GROUP_STATUS.CLOSED }">{{ g.status }}</span>
           </div>
           <div class="muted">{{ g.currency }} · {{ g.members.length }} members · reminders {{ g.reminder_days }}d</div>
         </RouterLink>
@@ -75,7 +76,15 @@ onMounted(load)
             </option>
           </select>
         </label>
-        <label>Reminder after (days) <input v-model.number="reminderDays" type="number" min="1" max="365" /></label>
+        <label>
+          Reminder after (days)
+          <input
+            v-model.number="reminderDays"
+            type="number"
+            :min="MIN_REMINDER_DAYS"
+            :max="MAX_REMINDER_DAYS"
+          />
+        </label>
         <p v-if="error" class="error">{{ error }}</p>
         <button type="submit" :disabled="loading">Create</button>
       </form>

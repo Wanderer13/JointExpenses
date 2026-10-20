@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 
+from app.constants import EventType, WsMessageType
 from app.database import get_db
 from app.deps import get_current_user, get_group_or_404, get_membership
 from app.models import GroupMember, GroupStatus, Settlement, SettlementStatus, User
@@ -108,7 +109,7 @@ async def create_settlement(
         db,
         group_id=group_id,
         actor_id=user.id,
-        event_type="settlement_pending",
+        event_type=EventType.SETTLEMENT_PENDING,
         payload={
             "settlement_id": settlement.id,
             "from_user_id": payload.from_user_id,
@@ -120,12 +121,14 @@ async def create_settlement(
     notify_users(
         db,
         user_ids=[other],
-        notification_type="settlement_pending",
+        notification_type=EventType.SETTLEMENT_PENDING,
         payload={"group_id": group_id, "settlement_id": settlement.id},
     )
     db.commit()
     out = _settlement_out(_load(db, settlement.id))
-    await manager.broadcast(group_id, {"type": "settlement_updated", "group_id": group_id})
+    await manager.broadcast(
+        group_id, {"type": WsMessageType.SETTLEMENT_UPDATED, "group_id": group_id}
+    )
     return out
 
 
@@ -146,10 +149,10 @@ async def settlement_action(
     if payload.action == "confirm":
         settlement.status = SettlementStatus.confirmed
         settlement.confirmed_at = datetime.now(timezone.utc)
-        event_type = "settlement_confirmed"
+        event_type = EventType.SETTLEMENT_CONFIRMED
     else:
         settlement.status = SettlementStatus.rejected
-        event_type = "settlement_rejected"
+        event_type = EventType.SETTLEMENT_REJECTED
 
     log_activity(
         db,
@@ -168,6 +171,6 @@ async def settlement_action(
     out = _settlement_out(_load(db, settlement.id))
     await manager.broadcast(
         settlement.group_id,
-        {"type": "balances_updated", "group_id": settlement.group_id},
+        {"type": WsMessageType.BALANCES_UPDATED, "group_id": settlement.group_id},
     )
     return out

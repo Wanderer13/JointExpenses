@@ -9,10 +9,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.config import get_settings
+from app.constants import ACCESS_COOKIE, WS_CLOSE_FORBIDDEN, WS_CLOSE_UNAUTHORIZED
 from app.database import SessionLocal, engine
 from app.deps import get_membership
 from app.routers import activity, auth, balances, expenses, groups, notifications, settlements
-from app.security import ACCESS_COOKIE, decode_token, get_user_by_id
+from app.security import decode_token, get_user_by_id
 from app.services.reminder_service import process_debt_reminders
 from app.ws import manager
 
@@ -75,22 +76,22 @@ def health() -> dict:
 async def group_ws(websocket: WebSocket, group_id: int) -> None:
     token = websocket.query_params.get("token") or websocket.cookies.get(ACCESS_COOKIE)
     if not token:
-        await websocket.close(code=4401)
+        await websocket.close(code=WS_CLOSE_UNAUTHORIZED)
         return
     user_id = decode_token(token)
     if user_id is None:
-        await websocket.close(code=4401)
+        await websocket.close(code=WS_CLOSE_UNAUTHORIZED)
         return
     db = SessionLocal()
     try:
         user = get_user_by_id(db, user_id)
         if not user:
-            await websocket.close(code=4401)
+            await websocket.close(code=WS_CLOSE_UNAUTHORIZED)
             return
         try:
             get_membership(db, group_id, user.id)
         except HTTPException:
-            await websocket.close(code=4403)
+            await websocket.close(code=WS_CLOSE_FORBIDDEN)
             return
     finally:
         db.close()

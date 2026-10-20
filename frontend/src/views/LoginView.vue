@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ApiError } from '../api'
+import {
+  GOOGLE_LINK_PASSWORD_HINT,
+  HTTP_CONFLICT,
+  safeRedirectPath,
+} from '../constants'
 import { useAuthStore } from '../stores/auth'
 
 const auth = useAuthStore()
@@ -19,8 +25,7 @@ const googleBtn = ref<HTMLElement | null>(null)
 let googleScript: HTMLScriptElement | null = null
 
 async function afterAuth() {
-  const redirect = (route.query.redirect as string) || '/'
-  await router.push(redirect)
+  await router.push(safeRedirectPath(route.query.redirect))
 }
 
 async function submit() {
@@ -44,8 +49,11 @@ async function handleGoogleCredential(credential: string) {
     try {
       await auth.loginWithGoogle(credential)
     } catch (e) {
-      // Existing password account: link Google only after password proof
-      if (e instanceof Error && e.message.includes('provide password') && password.value) {
+      const needsPassword =
+        e instanceof ApiError &&
+        e.status === HTTP_CONFLICT &&
+        e.message.includes(GOOGLE_LINK_PASSWORD_HINT)
+      if (needsPassword && password.value) {
         await auth.loginWithGoogle(credential, password.value)
       } else {
         throw e

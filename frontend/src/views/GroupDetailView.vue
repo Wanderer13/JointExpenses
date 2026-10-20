@@ -1,6 +1,19 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { api, money, receiptUrl, wsUrl } from '../api'
+import {
+  AMOUNT_INPUT_MIN,
+  AMOUNT_INPUT_STEP,
+  DEFAULT_CATEGORY,
+  DEFAULT_CURRENCY,
+  DEFAULT_SPLIT_TYPE,
+  GROUP_STATUS,
+  MEMBER_ROLE,
+  SETTLEMENT_STATUS,
+  SPLIT_TYPE,
+  formatMajorInput,
+  majorToCents,
+} from '../constants'
 import { CURRENCIES } from '../currencies'
 import { useAuthStore } from '../stores/auth'
 import {
@@ -25,25 +38,28 @@ const activity = ref<Activity[]>([])
 const error = ref('')
 const inviteEmail = ref('')
 const joinToken = ref('')
-const editCurrency = ref('USD')
+const editCurrency = ref(DEFAULT_CURRENCY)
 const currencySaving = ref(false)
 const editingExpenseId = ref<number | null>(null)
 let socket: WebSocket | null = null
 
 const amount = ref('')
-const category = ref('general')
+const category = ref(DEFAULT_CATEGORY)
 const expenseDate = ref(new Date().toISOString().slice(0, 10))
 const comment = ref('')
-const splitType = ref<SplitType>('equal')
+const splitType = ref<SplitType>(DEFAULT_SPLIT_TYPE)
 const payerId = ref<number | null>(null)
 const selected = ref<Record<number, boolean>>({})
 const shares = ref<Record<number, number>>({})
 const exact = ref<Record<number, string>>({})
 const receiptFile = ref<File | null>(null)
 
-const closed = computed(() => group.value?.status === 'closed')
+const closed = computed(() => group.value?.status === GROUP_STATUS.CLOSED)
 const isOwner = computed(
-  () => group.value?.members.some((m) => m.user_id === auth.user?.id && m.role === 'owner') ?? false,
+  () =>
+    group.value?.members.some(
+      (m) => m.user_id === auth.user?.id && m.role === MEMBER_ROLE.OWNER,
+    ) ?? false,
 )
 const inviteLink = computed(() =>
   group.value ? `${window.location.origin}/join/${group.value.invite_token}` : '',
@@ -55,17 +71,13 @@ function canMutateExpense(e: Expense): boolean {
   return isOwner.value || e.payer_id === auth.user.id || e.created_by_id === auth.user.id
 }
 
-function centsFromInput(value: string): number {
-  return Math.round(parseFloat(value || '0') * 100)
-}
-
 function resetExpenseForm() {
   editingExpenseId.value = null
   amount.value = ''
-  category.value = 'general'
+  category.value = DEFAULT_CATEGORY
   expenseDate.value = new Date().toISOString().slice(0, 10)
   comment.value = ''
-  splitType.value = 'equal'
+  splitType.value = DEFAULT_SPLIT_TYPE
   receiptFile.value = null
   if (auth.user) payerId.value = auth.user.id
   if (group.value) {
@@ -79,7 +91,7 @@ function resetExpenseForm() {
 
 function startEdit(e: Expense) {
   editingExpenseId.value = e.id
-  amount.value = (e.amount_cents / 100).toFixed(2)
+  amount.value = formatMajorInput(e.amount_cents)
   category.value = e.category
   expenseDate.value = e.expense_date
   comment.value = e.comment || ''
@@ -92,7 +104,7 @@ function startEdit(e: Expense) {
       selected.value[m.user_id] = splitIds.has(m.user_id)
       const split = e.splits.find((s) => s.user_id === m.user_id)
       shares.value[m.user_id] = split?.shares || 1
-      exact.value[m.user_id] = split ? (split.amount_cents / 100).toFixed(2) : ''
+      exact.value[m.user_id] = split ? formatMajorInput(split.amount_cents) : ''
     }
   }
   tab.value = 'expenses'
@@ -129,11 +141,11 @@ function buildParticipants() {
   return group.value.members
     .filter((m) => selected.value[m.user_id])
     .map((m) => {
-      if (splitType.value === 'shares') {
+      if (splitType.value === SPLIT_TYPE.SHARES) {
         return { user_id: m.user_id, shares: shares.value[m.user_id] || 1 }
       }
-      if (splitType.value === 'exact') {
-        return { user_id: m.user_id, amount_cents: centsFromInput(exact.value[m.user_id] || '0') }
+      if (splitType.value === SPLIT_TYPE.EXACT) {
+        return { user_id: m.user_id, amount_cents: majorToCents(exact.value[m.user_id] || '0') }
       }
       return { user_id: m.user_id }
     })
@@ -145,7 +157,7 @@ async function saveExpense() {
   const participants = buildParticipants()
   const body = {
     payer_id: payerId.value,
-    amount_cents: centsFromInput(amount.value),
+    amount_cents: majorToCents(amount.value),
     split_type: splitType.value,
     participants,
     category: category.value,
@@ -238,7 +250,7 @@ async function joinWithToken() {
 
 async function closeOrReopen() {
   if (!group.value) return
-  const path = group.value.status === 'open' ? 'close' : 'reopen'
+  const path = group.value.status === GROUP_STATUS.OPEN ? 'close' : 'reopen'
   await api(`/api/groups/${group.value.id}/${path}`, { method: 'POST' })
   await refreshAll()
 }
@@ -375,7 +387,10 @@ onUnmounted(() => socket?.close())
         </div>
         <p v-if="closed" class="muted">Group is closed — expense changes are blocked.</p>
         <fieldset :disabled="closed" class="stack" style="border: 0; padding: 0; margin: 0">
-          <label>Amount <input v-model="amount" type="number" step="0.01" min="0.01" required /></label>
+          <label>
+            Amount
+            <input v-model="amount" type="number" :step="AMOUNT_INPUT_STEP" :min="AMOUNT_INPUT_MIN" required />
+          </label>
           <label>
             Payer
             <select v-model.number="payerId">
@@ -396,7 +411,7 @@ onUnmounted(() => socket?.close())
               <input v-model="selected[m.user_id]" type="checkbox" />
               <span style="min-width: 5rem">{{ m.name }}</span>
               <input
-                v-if="splitType === 'shares'"
+                v-if="splitType === SPLIT_TYPE.SHARES"
                 v-model.number="shares[m.user_id]"
                 type="number"
                 min="1"
@@ -404,12 +419,12 @@ onUnmounted(() => socket?.close())
                 title="Shares"
                 placeholder="shares"
               />
-              <span v-if="splitType === 'shares'" class="muted">shares</span>
+              <span v-if="splitType === SPLIT_TYPE.SHARES" class="muted">shares</span>
               <input
-                v-if="splitType === 'exact'"
+                v-if="splitType === SPLIT_TYPE.EXACT"
                 v-model="exact[m.user_id]"
                 type="number"
-                step="0.01"
+                :step="AMOUNT_INPUT_STEP"
                 min="0"
                 style="width: 7rem"
                 title="Exact amount"
@@ -477,9 +492,15 @@ onUnmounted(() => socket?.close())
             <span
               >{{ s.from_name }} → {{ s.to_name }}: {{ money(s.amount_cents, group.currency) }}</span
             >
-            <span class="badge" :class="{ pending: s.status === 'pending' }">{{ s.status }}</span>
+            <span class="badge" :class="{ pending: s.status === SETTLEMENT_STATUS.PENDING }">{{
+              s.status
+            }}</span>
           </div>
-          <div v-if="s.status === 'pending' && auth.user?.id === s.to_user_id" class="row" style="margin-top: 0.5rem">
+          <div
+            v-if="s.status === SETTLEMENT_STATUS.PENDING && auth.user?.id === s.to_user_id"
+            class="row"
+            style="margin-top: 0.5rem"
+          >
             <button type="button" @click="settlementAction(s.id, 'confirm')">Confirm</button>
             <button class="secondary" type="button" @click="settlementAction(s.id, 'reject')">Reject</button>
           </div>

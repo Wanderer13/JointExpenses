@@ -9,6 +9,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.constants import DEFAULT_CURRENCY, DEFAULT_REMINDER_DAYS, INVITE_TOKEN_BYTES
 from app.database import Base, get_db
 from app.main import app
 from app.models import Group, GroupMember, GroupStatus, MemberRole, User
@@ -73,10 +74,10 @@ def group_with_members(db: Session, users: list[User]) -> Group:
     alice, bob, cara = users
     group = Group(
         name="Trip",
-        currency="USD",
-        reminder_days=7,
+        currency=DEFAULT_CURRENCY,
+        reminder_days=DEFAULT_REMINDER_DAYS,
         status=GroupStatus.open,
-        invite_token=secrets.token_urlsafe(16),
+        invite_token=secrets.token_urlsafe(INVITE_TOKEN_BYTES),
         created_by_id=alice.id,
     )
     db.add(group)

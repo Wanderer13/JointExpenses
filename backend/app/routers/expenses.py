@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, joinedload
 
 from app.config import get_settings
+from app.constants import ALLOWED_RECEIPT_SUFFIXES, BYTES_PER_MEBIBYTE, EventType, WsMessageType
 from app.database import get_db
 from app.deps import get_current_user, get_group_or_404, get_membership, require_expense_mutator
 from app.models import Expense, ExpenseSplit, GroupMember, GroupStatus, SplitType, User
@@ -17,8 +18,6 @@ from app.services.split_service import compute_split_amounts
 from app.ws import manager
 
 router = APIRouter(tags=["expenses"])
-
-ALLOWED_RECEIPT_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".pdf"}
 
 
 def _expense_out(expense: Expense) -> ExpenseOut:
@@ -135,18 +134,20 @@ async def create_expense(
         db,
         group_id=group_id,
         actor_id=user.id,
-        event_type="expense_created",
+        event_type=EventType.EXPENSE_CREATED,
         payload={"expense_id": expense.id, "amount_cents": expense.amount_cents},
     )
     notify_users(
         db,
         user_ids=[uid for uid in involved if uid != user.id],
-        notification_type="expense_created",
+        notification_type=EventType.EXPENSE_CREATED,
         payload={"group_id": group_id, "expense_id": expense.id, "amount_cents": expense.amount_cents},
     )
     db.commit()
     out = _expense_out(_load_expense(db, expense.id))
-    await manager.broadcast(group_id, {"type": "balances_updated", "group_id": group_id})
+    await manager.broadcast(
+        group_id, {"type": WsMessageType.BALANCES_UPDATED, "group_id": group_id}
+    )
     return out
 
 
@@ -202,13 +203,13 @@ async def update_expense(
         db,
         group_id=expense.group_id,
         actor_id=user.id,
-        event_type="expense_updated",
+        event_type=EventType.EXPENSE_UPDATED,
         payload={"expense_id": expense.id, "amount_cents": expense.amount_cents},
     )
     notify_users(
         db,
         user_ids=[uid for uid in involved if uid != user.id],
-        notification_type="expense_updated",
+        notification_type=EventType.EXPENSE_UPDATED,
         payload={
             "group_id": expense.group_id,
             "expense_id": expense.id,
@@ -217,7 +218,10 @@ async def update_expense(
     )
     db.commit()
     out = _expense_out(_load_expense(db, expense.id))
-    await manager.broadcast(expense.group_id, {"type": "balances_updated", "group_id": expense.group_id})
+    await manager.broadcast(
+        expense.group_id,
+        {"type": WsMessageType.BALANCES_UPDATED, "group_id": expense.group_id},
+    )
     return out
 
 
@@ -244,18 +248,20 @@ async def delete_expense(
         db,
         group_id=group_id,
         actor_id=user.id,
-        event_type="expense_deleted",
+        event_type=EventType.EXPENSE_DELETED,
         payload={"expense_id": expense.id, "amount_cents": expense.amount_cents},
     )
     notify_users(
         db,
         user_ids=[uid for uid in involved if uid != user.id],
-        notification_type="expense_deleted",
+        notification_type=EventType.EXPENSE_DELETED,
         payload={"group_id": group_id, "expense_id": expense.id},
     )
     db.delete(expense)
     db.commit()
-    await manager.broadcast(group_id, {"type": "balances_updated", "group_id": group_id})
+    await manager.broadcast(
+        group_id, {"type": WsMessageType.BALANCES_UPDATED, "group_id": group_id}
+    )
     return {"ok": True}
 
 
@@ -300,7 +306,11 @@ async def upload_receipt(
         )
     content = await file.read()
     if len(content) > settings.max_upload_bytes:
-        raise HTTPException(status_code=400, detail="Receipt file too large (max 5MB)")
+        max_mb = max(1, settings.max_upload_bytes // BYTES_PER_MEBIBYTE)
+        raise HTTPException(
+            status_code=400,
+            detail=f"Receipt file too large (max {max_mb}MB)",
+        )
     upload_root = Path(settings.upload_dir)
     upload_root.mkdir(parents=True, exist_ok=True)
     name = f"{expense_id}_{uuid.uuid4().hex}{suffix}"
