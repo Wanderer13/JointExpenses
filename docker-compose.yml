@@ -25,6 +25,7 @@ services:
       CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
       UPLOAD_DIR: /app/uploads
       MAIL_OUTBOX_DIR: /app/mail_outbox
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
     volumes:
       - ./backend/uploads:/app/uploads
       - ./backend/mail_outbox:/app/mail_outbox

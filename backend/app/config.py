@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     upload_dir: str = str(Path(__file__).resolve().parent.parent / "uploads")
     mail_outbox_dir: str = str(Path(__file__).resolve().parent.parent / "mail_outbox")
     reminder_check_seconds: int = 60
+    google_client_id: str = ""
 
     @property
     def cors_origin_list(self) -> list[str]:

@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+from unittest.mock import patch
+
+import pytest
+
+from app.config import get_settings
+from app.services.google_auth import GoogleAuthError
+
 
 def _register(client, name: str, email: str, password: str = "password123"):
     res = client.post(
@@ -236,3 +243,83 @@ def test_settlement_only_recipient_can_confirm(client):
         json={"action": "confirm"},
     )
     assert ok.status_code == 200
+
+
+@pytest.fixture()
+def google_client_id(monkeypatch):
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "test-google-client-id.apps.googleusercontent.com")
+    get_settings.cache_clear()
+    yield "test-google-client-id.apps.googleusercontent.com"
+    get_settings.cache_clear()
+
+
+def test_google_auth_not_configured(client, monkeypatch):
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "")
+    get_settings.cache_clear()
+    try:
+        res = client.post("/api/auth/google", json={"credential": "fake-token"})
+        assert res.status_code == 503
+    finally:
+        get_settings.cache_clear()
+
+
+def test_google_auth_creates_user(client, google_client_id):
+    claims = {
+        "sub": "google-sub-1",
+        "email": "gina@gmail.com",
+        "email_verified": True,
+        "name": "Gina Google",
+        "iss": "https://accounts.google.com",
+    }
+    with patch("app.routers.auth.verify_google_id_token", return_value=claims):
+        res = client.post("/api/auth/google", json={"credential": "fake-id-token"})
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["user"]["email"] == "gina@gmail.com"
+    assert body["user"]["name"] == "Gina Google"
+    assert body["access_token"]
+
+    login = client.post(
+        "/api/auth/login",
+        json={"email": "gina@gmail.com", "password": "anything"},
+    )
+    assert login.status_code == 401
+
+
+def test_google_auth_links_existing_email(client, google_client_id):
+    created = _register(client, "Alice", "alice@link.com")
+    claims = {
+        "sub": "google-sub-link",
+        "email": "alice@link.com",
+        "email_verified": True,
+        "name": "Alice G",
+        "iss": "https://accounts.google.com",
+    }
+    with patch("app.routers.auth.verify_google_id_token", return_value=claims):
+        res = client.post("/api/auth/google", json={"credential": "fake-id-token"})
+    assert res.status_code == 200
+    assert res.json()["user"]["id"] == created["user"]["id"]
+
+    login = client.post(
+        "/api/auth/login",
+        json={"email": "alice@link.com", "password": "password123"},
+    )
+    assert login.status_code == 200
+
+
+def test_google_auth_rejects_bad_token(client, google_client_id):
+    with patch(
+        "app.routers.auth.verify_google_id_token",
+        side_effect=GoogleAuthError("Invalid Google credential"),
+    ):
+        res = client.post("/api/auth/google", json={"credential": "bad"})
+    assert res.status_code == 401
+
+
+def test_google_auth_rejects_unverified_email(client, google_client_id):
+    with patch(
+        "app.routers.auth.verify_google_id_token",
+        side_effect=GoogleAuthError("Google email is not verified"),
+    ):
+        res = client.post("/api/auth/google", json={"credential": "unverified"})
+    assert res.status_code == 401

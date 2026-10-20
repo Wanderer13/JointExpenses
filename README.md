@@ -42,6 +42,24 @@ npm run dev
 
 UI: http://127.0.0.1:5173
 
+### Google Sign-In (optional)
+
+Email/password auth always works. To enable **Continue with Google**:
+
+1. In [Google Cloud Console](https://console.cloud.google.com/) create an OAuth client of type **Web application**.
+2. Under **Authorized JavaScript origins**, add `http://localhost:5173` and `http://127.0.0.1:5173`.
+3. Set the same client ID in both places:
+
+```bash
+# backend/.env
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+
+# frontend/.env
+VITE_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+```
+
+4. Restart API and Vite. The Google button appears on the login/register page. Without these env vars, the button is hidden.
+
 ### Demo users (after seed)
 
 | Email | Password |
@@ -61,7 +79,7 @@ cd frontend && npm install && npm run dev
 
 ## What works
 
-- Registration / login (JWT)
+- Registration / login (JWT), optional Google Sign-In (GIS ID token)
 - Groups: create, members, invite by link and email (stub), close/reopen
 - Expenses: equal / shares / exact, category, date, comment, receipt file
 - Balances per group and across all groups; suggested transfers (greedy)

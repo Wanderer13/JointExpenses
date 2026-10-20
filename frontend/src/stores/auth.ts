@@ -42,10 +42,19 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = res.user
   }
 
+  async function loginWithGoogle(credential: string) {
+    const res = await api<{ access_token: string; user: User }>('/api/auth/google', {
+      method: 'POST',
+      body: JSON.stringify({ credential }),
+    })
+    setToken(res.access_token)
+    user.value = res.user
+  }
+
   function logout() {
     setToken(null)
     user.value = null
   }
 
-  return { user, ready, isAuthenticated, bootstrap, login, register, logout }
+  return { user, ready, isAuthenticated, bootstrap, login, register, loginWithGoogle, logout }
 })

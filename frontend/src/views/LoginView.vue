@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 
@@ -14,20 +14,79 @@ const password = ref('')
 const error = ref('')
 const loading = ref(false)
 
+const googleClientId = (import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined)?.trim() || ''
+const googleBtn = ref<HTMLElement | null>(null)
+let googleScript: HTMLScriptElement | null = null
+
+async function afterAuth() {
+  const redirect = (route.query.redirect as string) || '/'
+  await router.push(redirect)
+}
+
 async function submit() {
   error.value = ''
   loading.value = true
   try {
     if (mode.value === 'login') await auth.login(email.value, password.value)
     else await auth.register(name.value, email.value, password.value)
-    const redirect = (route.query.redirect as string) || '/'
-    router.push(redirect)
+    await afterAuth()
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed'
   } finally {
     loading.value = false
   }
 }
+
+async function handleGoogleCredential(credential: string) {
+  error.value = ''
+  loading.value = true
+  try {
+    await auth.loginWithGoogle(credential)
+    await afterAuth()
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Google sign-in failed'
+  } finally {
+    loading.value = false
+  }
+}
+
+function renderGoogleButton() {
+  if (!googleClientId || !googleBtn.value || !window.google?.accounts?.id) return
+  window.google.accounts.id.initialize({
+    client_id: googleClientId,
+    callback: (response) => {
+      if (response.credential) void handleGoogleCredential(response.credential)
+    },
+  })
+  googleBtn.value.innerHTML = ''
+  window.google.accounts.id.renderButton(googleBtn.value, {
+    theme: 'outline',
+    size: 'large',
+    width: googleBtn.value.offsetWidth || 320,
+    text: 'continue_with',
+  })
+}
+
+function loadGoogleScript() {
+  if (!googleClientId) return
+  if (window.google?.accounts?.id) {
+    renderGoogleButton()
+    return
+  }
+  googleScript = document.createElement('script')
+  googleScript.src = 'https://accounts.google.com/gsi/client'
+  googleScript.async = true
+  googleScript.onload = () => renderGoogleButton()
+  document.head.appendChild(googleScript)
+}
+
+onMounted(() => {
+  loadGoogleScript()
+})
+
+onUnmounted(() => {
+  googleScript?.remove()
+})
 </script>
 
 <template>
@@ -44,6 +103,11 @@ async function submit() {
           Register
         </button>
       </div>
+
+      <template v-if="googleClientId">
+        <div ref="googleBtn" class="google-btn" />
+        <div class="auth-divider"><span>or continue with email</span></div>
+      </template>
 
       <label v-if="mode === 'register'">
         Name

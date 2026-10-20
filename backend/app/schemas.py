@@ -19,6 +19,10 @@ class UserLogin(BaseModel):
     password: str
 
 
+class GoogleAuthIn(BaseModel):
+    credential: str = Field(min_length=1)
+
+
 class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

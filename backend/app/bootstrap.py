@@ -4,6 +4,7 @@ from pathlib import Path
 
 from app.config import get_settings
 from app.database import Base, engine
+from app.migrate import migrate_schema
 
 
 def main() -> None:
@@ -11,6 +12,7 @@ def main() -> None:
     Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
     Path(settings.mail_outbox_dir).mkdir(parents=True, exist_ok=True)
     Base.metadata.create_all(bind=engine)
+    migrate_schema(engine)
     print("Database ready.")
 
 

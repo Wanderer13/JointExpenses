@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from app.config import get_settings
 from app.database import Base, SessionLocal, engine
 from app.deps import get_membership
+from app.migrate import migrate_schema
 from app.routers import activity, auth, balances, expenses, groups, notifications, settlements
 from app.security import decode_token, get_user_by_id
 from app.services.reminder_service import process_debt_reminders
@@ -36,6 +37,7 @@ def _run_reminders() -> None:
 async def lifespan(app: FastAPI):
     _ensure_dirs()
     Base.metadata.create_all(bind=engine)
+    migrate_schema(engine)
     scheduler = AsyncIOScheduler()
     scheduler.add_job(_run_reminders, "interval", seconds=settings.reminder_check_seconds, id="reminders")
     scheduler.start()
