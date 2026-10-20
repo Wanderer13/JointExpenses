@@ -50,11 +50,11 @@ def process_debt_reminders(db: Session) -> int:
             amount_major = amount / 100
             send_email(
                 to=debtor.email,
-                subject=f"Reminder: debt in group «{group.name}»",
+                subject=f'Reminder: debt in group "{group.name}"',
                 body=(
                     f"Hello {debtor.name},\n\n"
                     f"You still owe {creditor.name} {amount_major:.2f} {group.currency} "
-                    f"in group «{group.name}» (debt older than {group.reminder_days} days).\n"
+                    f'in group "{group.name}" (debt older than {group.reminder_days} days).\n'
                 ),
                 meta={
                     "group_id": group.id,
@@ -105,7 +105,7 @@ def send_group_close_report(db: Session, group: Group) -> None:
     for member in members:
         send_email(
             to=member.user.email,
-            subject=f"Group «{group.name}» closed — final report",
+            subject=f'Group "{group.name}" closed — final report',
             body=body,
             meta={"group_id": group.id, "event": "group_closed"},
         )

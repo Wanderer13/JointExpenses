@@ -1,24 +1,24 @@
-# Shared Expenses (Задание 6)
+# Shared Expenses (Task 6)
 
-Клиент-серверное приложение для совместных расходов: группы, расходы с разными типами деления, балансы, упрощение долгов, погашения с подтверждением, лента активности, напоминания должникам (stub-почта), закрытие группы с итоговым отчётом.
+A client–server app for shared expenses: groups, expenses with multiple split types, balances, debt simplification, settlements with confirmation, activity feed, debtor reminders (stub email), and group closing with a final report.
 
-## Стек
+## Stack
 
 - **Backend:** Python 3.12+, FastAPI, SQLAlchemy 2, JWT auth, APScheduler
 - **Frontend:** Vue 3 + Vite + TypeScript + Pinia + Vue Router
-- **DB:** SQLite по умолчанию (быстрый локальный запуск); PostgreSQL через `docker compose`
+- **DB:** SQLite by default (fast local run); PostgreSQL via `docker compose`
 
-## Правило копеек (equal split)
+## Cent leftover rule (equal split)
 
-Суммы хранятся в целых центах. При делении поровну:
+Amounts are stored in integer cents. For equal splits:
 
 1. `base = total // n`, `remainder = total % n`
-2. Участники сортируются по `user_id` по возрастанию
-3. Первые `remainder` участников получают `base + 1`, остальные — `base`
+2. Participants are sorted by `user_id` ascending
+3. The first `remainder` participants get `base + 1`, the rest get `base`
 
-Сумма долей всегда равна сумме расхода.
+Split parts always sum to the expense total.
 
-## Локальный запуск (без Docker)
+## Local run (without Docker)
 
 ### Backend
 
@@ -42,7 +42,7 @@ npm run dev
 
 UI: http://127.0.0.1:5173
 
-### Demo users (после seed)
+### Demo users (after seed)
 
 | Email | Password |
 |-------|----------|
@@ -50,42 +50,42 @@ UI: http://127.0.0.1:5173
 | bob@example.com | password123 |
 | cara@example.com | password123 |
 
-## Запуск с PostgreSQL (Docker)
+## Run with PostgreSQL (Docker)
 
 ```bash
 docker compose up --build
 cd frontend && npm install && npm run dev
 ```
 
-Переменная `DATABASE_URL` для API в compose задана на PostgreSQL. Локально без Docker используется SQLite-файл `backend/expenses.db`.
+`DATABASE_URL` for the API in compose points at PostgreSQL. Without Docker, the app uses the SQLite file `backend/expenses.db`.
 
-## Что работает
+## What works
 
-- Регистрация / логин (JWT)
-- Группы: создание, участники, invite по ссылке и email (stub), close/reopen
-- Расходы: equal / shares / exact, категория, дата, комментарий, файл чека
-- Балансы по группе и по всем группам; suggested transfers (greedy)
-- Погашения: pending → confirm/reject получателем; в баланс только confirmed
-- Лента активности и уведомления
-- WebSocket-обновления балансов/ленты при двух открытых вкладках
-- Reminder job: письмо в `backend/mail_outbox/` не чаще раза в неделю
-- При закрытии группы — итоговый отчёт в stub-почту всем участникам
-- Юнит-тесты: split, balances/settlements, security, mail stub, API flows — `cd backend && python -m pytest`
+- Registration / login (JWT)
+- Groups: create, members, invite by link and email (stub), close/reopen
+- Expenses: equal / shares / exact, category, date, comment, receipt file
+- Balances per group and across all groups; suggested transfers (greedy)
+- Settlements: pending → confirm/reject by recipient; only confirmed affect balances
+- Activity feed and notifications
+- WebSocket updates for balances/feed with two browser tabs open
+- Reminder job: emails written to `backend/mail_outbox/` at most once per week
+- On group close — final report emailed (stub) to all members
+- Unit tests: split, balances/settlements, security, mail stub, API flows — `cd backend && python -m pytest`
 
-## Что не вошло / next steps
+## Out of scope / next steps
 
-- Реальный SMTP и объектное хранилище для чеков
-- Курсы валют / мультивалютность внутри группы
-- Редактирование расхода в UI (API `PATCH /api/expenses/{id}` уже есть)
-- Alembic-миграции вместо `create_all` для продакшена
-- Более богатая мобильная вёрстка / PWA
+- Real SMTP and object storage for receipts
+- FX rates / multi-currency inside a group
+- Expense edit UI (API `PATCH /api/expenses/{id}` already exists)
+- Alembic migrations instead of `create_all` for production
+- Richer mobile layout / PWA
 
-## Честное состояние
+## Honest status
 
-Проект демонстрирует полный happy-path задания 6 на SQLite локально. Docker Compose описан для PostgreSQL; на машине разработки Docker может отсутствовать — тогда используйте SQLite-режим выше. Внешняя почта эмулируется файлами в `backend/mail_outbox/`.
+The project demonstrates the full Task 6 happy path on SQLite locally. Docker Compose is set up for PostgreSQL; if Docker is unavailable on the machine, use the SQLite mode above. External email is emulated with files in `backend/mail_outbox/`.
 
-## Чем делали
+## How it was built
 
-Cursor agent + Composer. Причины: быстрый каркас FastAPI/Vue, итерации по бизнес-правилам (копейки, settlements, WS), удобный локальный прогон без лишней инфраструктуры.
+Cursor agent + Composer. Reasons: fast FastAPI/Vue scaffolding, iterating on business rules (cents, settlements, WS), easy local run without heavy infrastructure.
 
-См. также [DECISION_LOG.md](DECISION_LOG.md).
+See also [DECISION_LOG.md](DECISION_LOG.md).

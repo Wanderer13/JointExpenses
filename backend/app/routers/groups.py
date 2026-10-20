@@ -161,9 +161,9 @@ def invite_by_email(
     group = get_group_or_404(db, group_id)
     send_email(
         to=payload.email.lower(),
-        subject=f"Invitation to group «{group.name}»",
+        subject=f'Invitation to group "{group.name}"',
         body=(
-            f"{user.name} invited you to «{group.name}».\n"
+            f'{user.name} invited you to "{group.name}".\n'
             f"Open the app and join with token: {group.invite_token}\n"
             f"Or use path /join/{group.invite_token}\n"
         ),

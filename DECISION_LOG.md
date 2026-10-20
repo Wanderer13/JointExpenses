@@ -6,32 +6,32 @@ Timestamps in local time (UTC+4), 2026-10-19.
 
 | Time | Event |
 |------|--------|
-| 17:28 | Прочитаны материалы MadDevs: PDF заданий, `_data.txt`, выбрано задание 6 |
-| 17:49 | Утверждён план: FastAPI + Vue 3 + PostgreSQL/SQLite, JWT, WebSocket, stub mail |
-| 17:50 | Старт реализации: каркас backend, docker-compose, модели и сервисы |
-| 17:52 | Роутеры auth/groups/expenses/balances/settlements/activity/notifications + WS |
-| 17:54 | Установка Node.js LTS (на машине не было), scaffold Vue вручную |
+| 17:28 | Read MadDevs materials: assignment PDF, `_data.txt`; chose Task 6 |
+| 17:49 | Approved plan: FastAPI + Vue 3 + PostgreSQL/SQLite, JWT, WebSocket, stub mail |
+| 17:50 | Started implementation: backend scaffold, docker-compose, models and services |
+| 17:52 | Routers for auth/groups/expenses/balances/settlements/activity/notifications + WS |
+| 17:54 | Installed Node.js LTS (was missing); scaffolded Vue manually |
 | 17:56 | Vue UI: login, groups, group detail (tabs), balances, notifications, join |
-| 17:58 | `pytest` 4 passed; seed demo users; README / этот лог |
+| 17:58 | `pytest` passed; seed demo users; README / this log |
 
 ## Key decisions
 
-1. **SQLite by default, Postgres via compose** — Docker на машине разработки отсутствовал; SQLite закрывает требование «быстрый локальный запуск», Postgres остаётся целевым вариантом в compose.
-2. **Balances as derived state** — nets считаются из expenses + confirmed settlements; нет кэш-таблицы долгов → edit/delete расхода автоматически согласован с погашениями.
-3. **Cents + deterministic leftover rule** — equal split: остаток копеек первым участникам по возрастанию `user_id` (см. README).
-4. **Debt simplification = greedy** — классическое сведение должников/кредиторов; достаточно для демо и инварианта `sum(nets) == 0`.
-5. **Settlements need recipient confirm** — pending видны, на баланс влияют только `confirmed`.
-6. **Email stub to filesystem** — `backend/mail_outbox/*.json` вместо SMTP (разрешено заданием).
-7. **WebSocket per group** — для двух вкладок; после мутаций broadcast `balances_updated`.
-8. **Auth: JWT login/password** — минимально достаточная модель входа без OAuth.
+1. **SQLite by default, Postgres via compose** — Docker was unavailable on the dev machine; SQLite meets the “fast local run” requirement, Postgres remains the target option in compose.
+2. **Balances as derived state** — nets are computed from expenses + confirmed settlements; no debt cache table → expense edit/delete stays consistent with settlements.
+3. **Cents + deterministic leftover rule** — equal split: leftover cents go to the first participants by ascending `user_id` (see README).
+4. **Debt simplification = greedy** — classic debtor/creditor matching; enough for the demo and the `sum(nets) == 0` invariant.
+5. **Settlements need recipient confirm** — pending ones are visible; only `confirmed` affect balances.
+6. **Email stub to filesystem** — `backend/mail_outbox/*.json` instead of SMTP (allowed by the assignment).
+7. **WebSocket per group** — for two tabs; broadcast `balances_updated` after mutations.
+8. **Auth: JWT login/password** — minimal sufficient login model without OAuth.
 
 ## Packages (why)
 
-- FastAPI — типизированные API, OpenAPI, WS из коробки
-- SQLAlchemy 2 — ORM + простой `create_all` для демо
-- Vue 3 + Pinia + Vue Router — выбранный стек фронта из требований
-- APScheduler — периодические reminder emails
-- passlib/bcrypt + python-jose — стандартный JWT-стек
+- FastAPI — typed APIs, OpenAPI, WebSockets out of the box
+- SQLAlchemy 2 — ORM + simple `create_all` for the demo
+- Vue 3 + Pinia + Vue Router — frontend stack required by the brief
+- APScheduler — periodic reminder emails
+- passlib/bcrypt + python-jose — standard JWT stack
 
 ## Not done (intentionally)
 
