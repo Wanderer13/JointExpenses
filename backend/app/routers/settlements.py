@@ -99,6 +99,10 @@ async def create_settlement(
             detail=f"Settlement exceeds outstanding debt ({owed} cents)",
         )
 
+    other_id = payload.to_user_id if user.id == payload.from_user_id else payload.from_user_id
+    confirm_now = payload.confirm_now
+    # Either party may declare the payment finished (I paid / They paid me).
+
     settlement = Settlement(
         group_id=group_id,
         from_user_id=payload.from_user_id,
@@ -108,29 +112,41 @@ async def create_settlement(
     )
     db.add(settlement)
     db.flush()
+
+    if confirm_now:
+        settlement.status = SettlementStatus.confirmed
+        settlement.confirmed_at = datetime.now(timezone.utc)
+        event_type = EventType.SETTLEMENT_CONFIRMED
+        admin_action = "settlement.create_confirm"
+        notify_type = EventType.SETTLEMENT_CONFIRMED
+    else:
+        event_type = EventType.SETTLEMENT_PENDING
+        admin_action = "settlement.create"
+        notify_type = EventType.SETTLEMENT_PENDING
+
     log_activity(
         db,
         group_id=group_id,
         actor_id=user.id,
-        event_type=EventType.SETTLEMENT_PENDING,
+        event_type=event_type,
         payload={
             "settlement_id": settlement.id,
             "from_user_id": payload.from_user_id,
             "to_user_id": payload.to_user_id,
             "amount_cents": payload.amount_cents,
+            "confirm_now": confirm_now,
         },
     )
-    other = payload.to_user_id if user.id == payload.from_user_id else payload.from_user_id
     notify_users(
         db,
-        user_ids=[other],
-        notification_type=EventType.SETTLEMENT_PENDING,
+        user_ids=[other_id],
+        notification_type=notify_type,
         payload={"group_id": group_id, "settlement_id": settlement.id},
     )
     log_user_action(
         db,
         actor=user,
-        action="settlement.create",
+        action=admin_action,
         target_type="settlement",
         target_id=settlement.id,
         payload={
@@ -138,12 +154,17 @@ async def create_settlement(
             "from_user_id": payload.from_user_id,
             "to_user_id": payload.to_user_id,
             "amount_cents": payload.amount_cents,
+            "confirm_now": confirm_now,
         },
     )
     db.commit()
     out = _settlement_out(_load(db, settlement.id))
     await manager.broadcast(
-        group_id, {"type": WsMessageType.SETTLEMENT_UPDATED, "group_id": group_id}
+        group_id,
+        {
+            "type": WsMessageType.BALANCES_UPDATED if confirm_now else WsMessageType.SETTLEMENT_UPDATED,
+            "group_id": group_id,
+        },
     )
     return out
 

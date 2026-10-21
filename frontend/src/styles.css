@@ -76,12 +76,14 @@ textarea {
 }
 
 .nav a,
-.nav button.linkish {
+.nav button.linkish,
+button.linkish {
   color: var(--muted);
   background: none;
   border: 0;
   cursor: pointer;
   padding: 0.25rem 0;
+  font-weight: 600;
 }
 
 .nav a.router-link-active {
@@ -293,6 +295,25 @@ button.secondary.active {
   width: min(420px, 100%);
 }
 
+.auth-error-bubble {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 12px;
+  background: #ffe4e6;
+  border: 1px solid rgba(159, 18, 57, 0.25);
+  color: var(--danger);
+}
+
+.auth-error-bubble p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.auth-error-bubble button.secondary {
+  justify-self: start;
+}
+
 .auth-card .brand {
   font-size: 2rem;
   margin-bottom: 0.25rem;
@@ -329,4 +350,167 @@ button.secondary.active {
 .neg {
   color: var(--danger);
   font-weight: 700;
+}
+
+.breadcrumb a {
+  color: var(--muted);
+}
+
+.breadcrumb [aria-current='page'] {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.journey {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.journey-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.journey-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0.45rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--muted);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.journey-step.current {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.journey-step.done {
+  border-color: transparent;
+  background: #e8f5e9;
+  color: var(--accent);
+}
+
+.journey-num {
+  display: inline-grid;
+  place-items: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 999px;
+  background: rgba(28, 42, 36, 0.08);
+  font-size: 0.78rem;
+}
+
+.journey-step.current .journey-num,
+.journey-step.done .journey-num {
+  background: rgba(15, 106, 86, 0.15);
+}
+
+.journey-dismiss {
+  font-size: 0.85rem;
+}
+
+.nudge-btn {
+  display: grid;
+  gap: 0.2rem;
+  width: 100%;
+  margin: 0;
+  padding: 0.85rem 1rem;
+  text-align: left;
+  border-radius: 14px;
+  border: 1px solid rgba(15, 106, 86, 0.2);
+  background: var(--accent-soft);
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+}
+
+.nudge-btn strong {
+  color: var(--accent);
+}
+
+.nudge-btn span {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 400;
+}
+
+.nudge-btn:hover {
+  border-color: var(--accent);
+}
+
+.tab-subtitle {
+  margin: 0.35rem 0 0;
+  font-size: 0.9rem;
+}
+
+.flash {
+  margin: 0;
+  padding: 0.5rem 0.85rem;
+  border-radius: 12px;
+  background: rgba(215, 239, 231, 0.7);
+}
+
+.invite-url {
+  flex: 1;
+  min-width: 12rem;
+  word-break: break-all;
+  font-size: 0.85rem;
+}
+
+.touch-btn {
+  min-height: 44px;
+  min-width: 5.5rem;
+}
+
+.receipt-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-top: 0.5rem;
+}
+
+.receipt-thumb {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+}
+
+a.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 0.65rem 1.1rem;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  text-align: center;
+}
+
+@media (max-width: 860px) {
+  .expenses-layout,
+  .settle-layout {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .expenses-layout .sticky-form {
+    order: -1;
+    position: sticky;
+    top: 0.5rem;
+    z-index: 2;
+  }
 }

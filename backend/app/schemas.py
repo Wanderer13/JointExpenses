@@ -125,6 +125,7 @@ class MemberOut(BaseModel):
     role: MemberRole
     name: str
     email: EmailStr
+    awaiting_signup: bool = False
 
 
 class GroupOut(BaseModel):
@@ -147,6 +148,12 @@ class InviteEmailIn(BaseModel):
 class InviteEmailOut(BaseModel):
     message: str
     join_url: str
+
+
+class JoinPreviewOut(BaseModel):
+    name: str
+    status: GroupStatus
+    currency: str
 
 
 class SplitParticipantIn(BaseModel):
@@ -243,6 +250,8 @@ class SettlementCreate(BaseModel):
     from_user_id: int
     to_user_id: int
     amount_cents: int = Field(gt=0)
+    # When true, confirm in the same request (payer declaring paid, or other party still invited).
+    confirm_now: bool = False
 
 
 class SettlementOut(BaseModel):

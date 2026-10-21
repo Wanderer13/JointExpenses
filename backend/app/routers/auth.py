@@ -71,10 +71,27 @@ def register(
     db: Session = Depends(get_db),
 ) -> TokenOut:
     check_auth_rate_limit(request)
-    existing = db.query(User).filter(User.email == payload.email.lower()).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Email already registered")
     email = payload.email.lower()
+    existing = db.query(User).filter(User.email == email).first()
+    if existing is not None:
+        # Claim an invited stub account (created by email invite, no password yet).
+        if existing.password_hash is None and existing.google_sub is None:
+            existing.name = payload.name.strip()
+            existing.password_hash = hash_password(payload.password)
+            existing.role = resolve_app_role(email)
+            accept_pending_invites(db, existing)
+            log_user_action(
+                db,
+                actor=existing,
+                action="user.register",
+                target_type="user",
+                target_id=existing.id,
+                payload={"email": existing.email, "claimed_invite": True},
+            )
+            db.commit()
+            db.refresh(existing)
+            return _issue_tokens(response, db, existing)
+        raise HTTPException(status_code=400, detail="Email already registered")
     user = User(
         email=email,
         name=payload.name.strip(),
@@ -156,19 +173,24 @@ def google_auth(
     if user is None:
         user = db.query(User).filter(User.email == email).first()
         if user is not None:
-            if not payload.password:
+            # Invited stub (no password yet) can be claimed by Google without a password.
+            if user.password_hash is None and user.google_sub is None:
+                user.google_sub = google_sub
+                user.name = name
+            elif not payload.password:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail=GOOGLE_LINK_PASSWORD_REQUIRED,
                 )
-            if user.password_hash is None or not verify_password(payload.password, user.password_hash):
+            elif user.password_hash is None or not verify_password(payload.password, user.password_hash):
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Invalid password for account linking",
                 )
-            user.google_sub = google_sub
-            if not user.name.strip():
-                user.name = name
+            else:
+                user.google_sub = google_sub
+                if not user.name.strip():
+                    user.name = name
         else:
             user = User(
                 email=email,

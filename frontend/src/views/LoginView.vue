@@ -9,6 +9,8 @@ import {
 } from '../constants'
 import { useAuthStore } from '../stores/auth'
 
+const HTTP_UNAUTHORIZED = 401
+
 const auth = useAuthStore()
 const router = useRouter()
 const route = useRoute()
@@ -18,11 +20,22 @@ const name = ref('')
 const email = ref('')
 const password = ref('')
 const error = ref('')
+const showRegisterCta = ref(false)
 const loading = ref(false)
 
 const googleClientId = (import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined)?.trim() || ''
 const googleBtn = ref<HTMLElement | null>(null)
 let googleScript: HTMLScriptElement | null = null
+
+function clearError() {
+  error.value = ''
+  showRegisterCta.value = false
+}
+
+function switchToRegister() {
+  mode.value = 'register'
+  clearError()
+}
 
 async function afterAuth() {
   // Land on Groups (or a safe deep link) so the main shell tabs are visible.
@@ -30,21 +43,30 @@ async function afterAuth() {
 }
 
 async function submit() {
-  error.value = ''
+  clearError()
   loading.value = true
   try {
     if (mode.value === 'login') await auth.login(email.value, password.value)
     else await auth.register(name.value, email.value, password.value)
     await afterAuth()
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Failed'
+    const message = e instanceof Error ? e.message : 'Failed'
+    error.value = message
+    if (
+      mode.value === 'login' &&
+      e instanceof ApiError &&
+      e.status === HTTP_UNAUTHORIZED
+    ) {
+      showRegisterCta.value = true
+      error.value = 'Could not log in — check email and password, or create an account.'
+    }
   } finally {
     loading.value = false
   }
 }
 
 async function handleGoogleCredential(credential: string) {
-  error.value = ''
+  clearError()
   loading.value = true
   try {
     try {
@@ -116,9 +138,27 @@ onUnmounted(() => {
       </div>
 
       <div class="tabs">
-        <button type="button" :class="{ active: mode === 'login' }" @click="mode = 'login'">Login</button>
-        <button type="button" :class="{ active: mode === 'register' }" @click="mode = 'register'">
+        <button type="button" :class="{ active: mode === 'login' }" @click="mode = 'login'; clearError()">
+          Login
+        </button>
+        <button
+          type="button"
+          :class="{ active: mode === 'register' }"
+          @click="switchToRegister()"
+        >
           Register
+        </button>
+      </div>
+
+      <div v-if="error" class="auth-error-bubble" role="alert">
+        <p>{{ error }}</p>
+        <button
+          v-if="showRegisterCta"
+          type="button"
+          class="secondary"
+          @click="switchToRegister()"
+        >
+          Create an account
         </button>
       </div>
 
@@ -140,7 +180,6 @@ onUnmounted(() => {
         <input v-model="password" type="password" minlength="6" required />
       </label>
 
-      <p v-if="error" class="error">{{ error }}</p>
       <button type="submit" :disabled="loading">{{ loading ? '…' : mode === 'login' ? 'Log in' : 'Create account' }}</button>
       <p class="muted">Demo: alice@example.com / password123</p>
     </form>

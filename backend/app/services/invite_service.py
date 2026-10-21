@@ -48,6 +48,37 @@ def upsert_pending_invite(db: Session, group_id: int, email: str) -> PendingInvi
     return row
 
 
+def ensure_invited_member(db: Session, group: Group, email: str) -> User:
+    """Find or create a user for the invite email and add them to the group now.
+
+    Invited people can be included in expenses before they register. They claim the
+    account later via register (set password) or Google Sign-In.
+    """
+    email = email.lower()
+    user = db.query(User).filter(User.email == email).first()
+    if user is None:
+        local = email.split("@")[0][:120] or "guest"
+        user = User(email=email, name=local, password_hash=None)
+        db.add(user)
+        db.flush()
+    membership = (
+        db.query(GroupMember)
+        .filter(GroupMember.group_id == group.id, GroupMember.user_id == user.id)
+        .first()
+    )
+    if membership is None:
+        db.add(GroupMember(group_id=group.id, user_id=user.id, role=MemberRole.member))
+        db.flush()
+        log_activity(
+            db,
+            group_id=group.id,
+            actor_id=None,
+            event_type=EventType.MEMBER_JOINED,
+            payload={"user_id": user.id, "name": user.name, "via": "email_invite"},
+        )
+    return user
+
+
 def clear_pending_invite(db: Session, group_id: int, email: str) -> None:
     db.query(PendingInvite).filter(
         PendingInvite.group_id == group_id,

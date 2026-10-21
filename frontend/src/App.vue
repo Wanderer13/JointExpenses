@@ -26,7 +26,7 @@ async function logout() {
 </script>
 
 <template>
-  <div v-if="route.name === 'login'">
+  <div v-if="route.name === 'login' || (route.name === 'join' && !auth.isAuthenticated)">
     <RouterView />
   </div>
   <div v-else class="shell">
@@ -41,7 +41,6 @@ async function logout() {
             >{{ overview.data.pending_settlement_count }}</span
           >
         </RouterLink>
-        <RouterLink to="/balances">My balances</RouterLink>
         <RouterLink to="/notifications">Notifications</RouterLink>
         <RouterLink v-if="auth.isAdmin" to="/admin">Admin</RouterLink>
         <span class="muted">{{ auth.user?.name }}</span>

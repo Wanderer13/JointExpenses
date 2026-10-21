@@ -15,6 +15,7 @@ from app.schemas import (
     GroupUpdate,
     InviteEmailIn,
     InviteEmailOut,
+    JoinPreviewOut,
     MemberOut,
 )
 from app.services.activity_service import log_activity
@@ -22,6 +23,7 @@ from app.services.admin_action_log import log_user_action
 from app.services.invite_service import (
     build_join_url,
     clear_pending_invite,
+    ensure_invited_member,
     invite_email_bodies,
     upsert_pending_invite,
 )
@@ -33,7 +35,15 @@ router = APIRouter(prefix="/groups", tags=["groups"])
 
 
 def _member_out(m: GroupMember) -> MemberOut:
-    return MemberOut(user_id=m.user_id, role=m.role, name=m.user.name, email=m.user.email)
+    u = m.user
+    awaiting = u.password_hash is None and u.google_sub is None
+    return MemberOut(
+        user_id=m.user_id,
+        role=m.role,
+        name=u.name,
+        email=u.email,
+        awaiting_signup=awaiting,
+    )
 
 
 def _group_out(group: Group) -> GroupOut:
@@ -147,6 +157,15 @@ def update_group(
     return _group_out(_load_group(db, group_id))
 
 
+@router.get("/join/{invite_token}/preview", response_model=JoinPreviewOut)
+def join_preview(invite_token: str, db: Session = Depends(get_db)) -> JoinPreviewOut:
+    """Public peek at group name before login/register."""
+    group = db.query(Group).filter(Group.invite_token == invite_token).first()
+    if not group:
+        raise HTTPException(status_code=404, detail="Invite not found")
+    return JoinPreviewOut(name=group.name, status=group.status, currency=group.currency)
+
+
 @router.post("/join/{invite_token}", response_model=GroupOut)
 def join_by_token(
     invite_token: str,
@@ -194,9 +213,14 @@ def invite_by_email(
 ) -> InviteEmailOut:
     get_membership(db, group_id, user.id)
     group = get_group_or_404(db, group_id)
+    if group.status == GroupStatus.closed:
+        raise HTTPException(status_code=400, detail="Group is closed")
     email = payload.email.lower()
+    if email == user.email.lower():
+        raise HTTPException(status_code=400, detail="You are already in this group")
     join_url = build_join_url(group.invite_token)
     text_body, html_body = invite_email_bodies(user.name, group.name, join_url, group.invite_token)
+    ensure_invited_member(db, group, email)
     upsert_pending_invite(db, group.id, email)
     send_email(
         to=email,

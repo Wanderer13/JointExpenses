@@ -37,6 +37,7 @@ export interface Member {
   role: 'owner' | 'member'
   name: string
   email: string
+  awaiting_signup?: boolean
 }
 
 export interface Group {

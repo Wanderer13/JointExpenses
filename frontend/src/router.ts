@@ -16,7 +16,7 @@ const router = createRouter({
     { path: '/', name: 'groups', component: GroupsView },
     { path: '/groups/:id', name: 'group', component: GroupDetailView, props: true },
     { path: '/users/:id', name: 'user', component: UserProfileView, props: true },
-    { path: '/join/:token', name: 'join', component: JoinView, props: true },
+    { path: '/join/:token', name: 'join', component: JoinView, props: true, meta: { guestOk: true } },
     { path: '/balances', name: 'balances', component: MyBalancesView },
     { path: '/notifications', name: 'notifications', component: NotificationsView },
     { path: '/admin', name: 'admin', component: AdminView, meta: { admin: true } },
@@ -30,7 +30,9 @@ router.beforeEach(async (to) => {
     if (auth.isAuthenticated) return { name: 'groups' }
     return true
   }
-  if (!auth.isAuthenticated) return { name: 'login', query: { redirect: to.fullPath } }
+  if (!auth.isAuthenticated && !to.meta.guestOk) {
+    return { name: 'login', query: { redirect: to.fullPath } }
+  }
   if (to.meta.admin && !auth.isAdmin) return { name: 'groups' }
   return true
 })
