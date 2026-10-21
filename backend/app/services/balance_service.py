@@ -80,6 +80,7 @@ def group_balances_payload(db: Session, group: Group) -> dict:
             {
                 "user_id": uid,
                 "name": users[uid].name if uid in users else str(uid),
+                "email": users[uid].email if uid in users else None,
                 "balance_cents": bal,
             }
             for uid, bal in sorted(nets.items(), key=lambda x: x[0])
@@ -88,8 +89,10 @@ def group_balances_payload(db: Session, group: Group) -> dict:
             {
                 "from_user_id": f,
                 "from_name": users[f].name if f in users else str(f),
+                "from_email": users[f].email if f in users else None,
                 "to_user_id": t,
                 "to_name": users[t].name if t in users else str(t),
+                "to_email": users[t].email if t in users else None,
                 "amount_cents": amt,
             }
             for f, t, amt in transfers

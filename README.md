@@ -105,6 +105,8 @@ Set `ADMIN_EMAILS` (comma-separated) in `backend/.env` so those addresses get th
 - Expenses: equal / shares / exact, category, date, comment, receipt; **create / edit / delete** (payer, creator, or owner)
 - Balances per group and across all groups; suggested transfers (greedy)
 - Settlements: pending → confirm/reject by recipient; amount capped to outstanding debt; only confirmed affect balances
+- Home overview: pending settlements (confirm/reject), balances by currency, open expenses; nav badge for pending count
+- Co-member profiles (`/users/:id`) with mailto email; people linked by name across expenses, balances, and settlements
 - Activity feed and notifications
 - WebSocket updates for balances/feed with two browser tabs open
 - Reminder job: SMTP or stub outbox at most once per week

@@ -12,7 +12,7 @@ from app.config import get_settings
 from app.constants import ACCESS_COOKIE, WS_CLOSE_FORBIDDEN, WS_CLOSE_UNAUTHORIZED
 from app.database import SessionLocal, engine
 from app.deps import get_membership
-from app.routers import activity, admin, auth, balances, expenses, groups, notifications, settlements
+from app.routers import activity, admin, auth, balances, expenses, groups, me, notifications, settlements
 from app.security import decode_token, get_user_by_id
 from app.services.reminder_service import process_debt_reminders
 from app.ws import manager
@@ -55,6 +55,7 @@ app.add_middleware(
 
 app.include_router(auth.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
+app.include_router(me.router, prefix="/api")
 app.include_router(groups.router, prefix="/api")
 app.include_router(expenses.router, prefix="/api")
 app.include_router(balances.router, prefix="/api")

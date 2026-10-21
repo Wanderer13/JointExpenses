@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.constants import ACCESS_COOKIE
 from app.database import get_db
-from app.models import AppRole, Group, GroupMember, User
+from app.models import AppRole, Group, GroupMember, MemberRole, User
 from app.security import decode_token, get_user_by_id
 
 bearer = HTTPBearer(auto_error=False)
@@ -61,5 +61,8 @@ def get_group_or_404(db: Session, group_id: int) -> Group:
 
 
 def require_expense_mutator(db: Session, group_id: int, user: User, *, payer_id: int, created_by_id: int) -> None:
-    """Any group member may mutate expenses in an open group."""
-    get_membership(db, group_id, user.id)
+    """Only payer, creator, or group owner may mutate an expense."""
+    membership = get_membership(db, group_id, user.id)
+    if user.id in (payer_id, created_by_id) or membership.role == MemberRole.owner:
+        return
+    raise HTTPException(status_code=403, detail="Only payer, creator, or owner can modify this expense")

@@ -183,6 +183,7 @@ class SplitOut(BaseModel):
     amount_cents: int
     shares: int | None = None
     name: str | None = None
+    email: EmailStr | None = None
 
 
 class ExpenseOut(BaseModel):
@@ -203,19 +204,23 @@ class ExpenseOut(BaseModel):
     updated_at: datetime
     splits: list[SplitOut] = []
     payer_name: str | None = None
+    payer_email: EmailStr | None = None
 
 
 class NetBalanceOut(BaseModel):
     user_id: int
     name: str
+    email: EmailStr | None = None
     balance_cents: int
 
 
 class TransferSuggestionOut(BaseModel):
     from_user_id: int
     from_name: str
+    from_email: EmailStr | None = None
     to_user_id: int
     to_name: str
+    to_email: EmailStr | None = None
     amount_cents: int
 
 
@@ -252,7 +257,70 @@ class SettlementOut(BaseModel):
     created_at: datetime
     confirmed_at: datetime | None
     from_name: str | None = None
+    from_email: EmailStr | None = None
     to_name: str | None = None
+    to_email: EmailStr | None = None
+
+
+class PendingSettlementOut(BaseModel):
+    id: int
+    group_id: int
+    group_name: str
+    currency: str
+    from_user_id: int
+    to_user_id: int
+    amount_cents: int
+    status: SettlementStatus
+    created_at: datetime
+    from_name: str
+    from_email: EmailStr
+    to_name: str
+    to_email: EmailStr
+    counterpart_user_id: int
+    counterpart_name: str
+    counterpart_email: EmailStr
+    needs_my_action: bool = True
+
+
+class CurrencyBalanceSummaryOut(BaseModel):
+    currency: str
+    you_owe_cents: int
+    owed_to_you_cents: int
+
+
+class OpenExpenseOut(BaseModel):
+    id: int
+    group_id: int
+    group_name: str
+    currency: str
+    category: str
+    amount_cents: int
+    expense_date: date
+    payer_id: int
+    payer_name: str
+    payer_email: EmailStr
+
+
+class OverviewOut(BaseModel):
+    pending_settlements: list[PendingSettlementOut]
+    balances_by_currency: list[CurrencyBalanceSummaryOut]
+    group_balances: list[MyBalanceItemOut]
+    open_expenses: list[OpenExpenseOut]
+    pending_settlement_count: int
+
+
+class SharedGroupOut(BaseModel):
+    id: int
+    name: str
+    currency: str
+    status: GroupStatus
+
+
+class UserProfileOut(BaseModel):
+    id: int
+    name: str
+    email: EmailStr
+    shared_groups: list[SharedGroupOut] = []
 
 
 class ActivityOut(BaseModel):

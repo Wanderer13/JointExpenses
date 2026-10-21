@@ -37,12 +37,14 @@ def _expense_out(expense: Expense) -> ExpenseOut:
         created_at=expense.created_at,
         updated_at=expense.updated_at,
         payer_name=expense.payer.name if expense.payer else None,
+        payer_email=expense.payer.email if expense.payer else None,
         splits=[
             SplitOut(
                 user_id=s.user_id,
                 amount_cents=s.amount_cents,
                 shares=s.shares,
                 name=s.user.name if s.user else None,
+                email=s.user.email if s.user else None,
             )
             for s in expense.splits
         ],

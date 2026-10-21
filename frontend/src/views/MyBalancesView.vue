@@ -25,7 +25,12 @@ onMounted(async () => {
       to propose or confirm repayments.
     </p>
     <div class="list">
-      <RouterLink v-for="b in items" :key="b.group_id" class="item" :to="`/groups/${b.group_id}`">
+      <RouterLink
+        v-for="b in items"
+        :key="b.group_id"
+        class="item"
+        :to="`/groups/${b.group_id}?tab=balances`"
+      >
         <div class="row" style="justify-content: space-between">
           <div>
             <strong>{{ b.group_name }}</strong>

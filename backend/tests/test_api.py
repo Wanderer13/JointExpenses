@@ -290,7 +290,7 @@ def test_settlement_either_party_can_confirm(client):
     assert ok.json()["status"] == "confirmed"
 
 
-def test_expense_complete_and_member_can_mutate(client):
+def test_expense_complete_reopen_and_authz(client):
     alice = _register(client, "Alice", "e1@example.com")
     bob = _register(client, "Bob", "e2@example.com")
     ah = _auth_header(alice["access_token"])
@@ -324,10 +324,17 @@ def test_expense_complete_and_member_can_mutate(client):
     assert expense["status"] == "open"
     eid = expense["id"]
 
-    # Other member can complete
-    done = client.patch(
+    # Other member cannot mutate (payer/creator/owner only)
+    denied = client.patch(
         f"/api/expenses/{eid}",
         headers=bh,
+        json={"status": "completed"},
+    )
+    assert denied.status_code == 403
+
+    done = client.patch(
+        f"/api/expenses/{eid}",
+        headers=ah,
         json={"status": "completed"},
     )
     assert done.status_code == 200
@@ -336,21 +343,20 @@ def test_expense_complete_and_member_can_mutate(client):
     # Cannot edit amounts while completed
     blocked = client.patch(
         f"/api/expenses/{eid}",
-        headers=bh,
+        headers=ah,
         json={"category": "taxi"},
     )
     assert blocked.status_code == 400
 
-    # Reopen then other member can edit
     reopen = client.patch(
         f"/api/expenses/{eid}",
-        headers=bh,
+        headers=ah,
         json={"status": "open"},
     )
     assert reopen.status_code == 200
     edited = client.patch(
         f"/api/expenses/{eid}",
-        headers=bh,
+        headers=ah,
         json={"category": "taxi"},
     )
     assert edited.status_code == 200

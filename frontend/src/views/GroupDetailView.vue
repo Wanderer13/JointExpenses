@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { api, money, receiptUrl, wsUrl } from '../api'
+import PersonLink from '../components/PersonLink.vue'
 import {
   AMOUNT_INPUT_MIN,
   AMOUNT_INPUT_STEP,
@@ -17,6 +19,7 @@ import {
 } from '../constants'
 import { CURRENCIES } from '../currencies'
 import { useAuthStore } from '../stores/auth'
+import { useOverviewStore } from '../stores/overview'
 import {
   SPLIT_TYPE_LABELS,
   type Activity,
@@ -27,10 +30,25 @@ import {
   type SplitType,
 } from '../types'
 
+type GroupTab = 'expenses' | 'balances' | 'settlements' | 'activity' | 'invite'
+type ExpenseFilter = 'open' | 'completed' | 'all'
+
+const TAB_VALUES: GroupTab[] = ['expenses', 'balances', 'settlements', 'activity', 'invite']
+
 const props = defineProps<{ id: string }>()
 const auth = useAuthStore()
+const overview = useOverviewStore()
+const route = useRoute()
+const router = useRouter()
 
-const tab = ref<'expenses' | 'balances' | 'settlements' | 'activity' | 'invite'>('expenses')
+function tabFromQuery(): GroupTab {
+  const q = route.query.tab
+  if (typeof q === 'string' && TAB_VALUES.includes(q as GroupTab)) return q as GroupTab
+  return 'expenses'
+}
+
+const tab = ref<GroupTab>(tabFromQuery())
+const expenseFilter = ref<ExpenseFilter>('open')
 const group = ref<Group | null>(null)
 const expenses = ref<Expense[]>([])
 const balances = ref<GroupBalances | null>(null)
@@ -69,8 +87,34 @@ const inviteLink = computed(() =>
 )
 const formTitle = computed(() => (editingExpenseId.value ? 'Edit expense' : 'Add expense'))
 
-function canMutateExpense(_e: Expense): boolean {
-  return Boolean(auth.user && group.value)
+const filteredExpenses = computed(() => {
+  if (expenseFilter.value === 'all') return expenses.value
+  if (expenseFilter.value === 'completed') {
+    return expenses.value.filter((e) => e.status === EXPENSE_STATUS.COMPLETED)
+  }
+  return expenses.value.filter((e) => e.status !== EXPENSE_STATUS.COMPLETED)
+})
+
+const pendingSettlements = computed(() =>
+  settlements.value.filter((s) => s.status === SETTLEMENT_STATUS.PENDING),
+)
+const historySettlements = computed(() =>
+  settlements.value.filter((s) => s.status !== SETTLEMENT_STATUS.PENDING),
+)
+
+function setTab(next: GroupTab) {
+  tab.value = next
+  void router.replace({ query: { ...route.query, tab: next } })
+}
+
+function canMutateExpense(e: Expense): boolean {
+  if (!auth.user || !group.value) return false
+  if (auth.user.id === e.payer_id || auth.user.id === e.created_by_id) return true
+  return (
+    group.value.members.some(
+      (m) => m.user_id === auth.user?.id && m.role === MEMBER_ROLE.OWNER,
+    ) ?? false
+  )
 }
 
 function isExpenseOpen(e: Expense): boolean {
@@ -273,6 +317,7 @@ async function settle(fromId: number, toId: number, amountCents: number) {
       }),
     })
     await refreshAll()
+    void overview.refresh()
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed'
   }
@@ -286,6 +331,7 @@ async function settlementAction(id: number, action: 'confirm' | 'reject') {
       body: JSON.stringify({ action }),
     })
     await refreshAll()
+    void overview.refresh()
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed'
   }
@@ -349,12 +395,21 @@ watch(
   () => props.id,
   async () => {
     resetExpenseForm()
+    tab.value = tabFromQuery()
     await refreshAll()
     connectWs()
   },
 )
 
+watch(
+  () => route.query.tab,
+  () => {
+    tab.value = tabFromQuery()
+  },
+)
+
 onMounted(async () => {
+  tab.value = tabFromQuery()
   await refreshAll()
   connectWs()
 })
@@ -402,13 +457,19 @@ onUnmounted(() => socket?.close())
         </span>
       </form>
       <div class="tabs" style="margin-top: 1rem">
-        <button type="button" :class="{ active: tab === 'expenses' }" @click="tab = 'expenses'">Expenses</button>
-        <button type="button" :class="{ active: tab === 'balances' }" @click="tab = 'balances'">Balances</button>
-        <button type="button" :class="{ active: tab === 'settlements' }" @click="tab = 'settlements'">
+        <button type="button" :class="{ active: tab === 'expenses' }" @click="setTab('expenses')">
+          Expenses
+        </button>
+        <button type="button" :class="{ active: tab === 'balances' }" @click="setTab('balances')">
+          Balances
+        </button>
+        <button type="button" :class="{ active: tab === 'settlements' }" @click="setTab('settlements')">
           Settlements
         </button>
-        <button type="button" :class="{ active: tab === 'activity' }" @click="tab = 'activity'">Activity</button>
-        <button type="button" :class="{ active: tab === 'invite' }" @click="tab = 'invite'">Invite</button>
+        <button type="button" :class="{ active: tab === 'activity' }" @click="setTab('activity')">
+          Activity
+        </button>
+        <button type="button" :class="{ active: tab === 'invite' }" @click="setTab('invite')">Invite</button>
       </div>
     </section>
 
@@ -421,8 +482,34 @@ onUnmounted(() => socket?.close())
           Completing an expense marks it done. To clear what someone owes, use
           <strong>Balances</strong> (propose) then <strong>Settlements</strong> (confirm).
         </p>
+        <div class="row" style="gap: 0.4rem">
+          <button
+            type="button"
+            class="secondary"
+            :class="{ active: expenseFilter === 'open' }"
+            @click="expenseFilter = 'open'"
+          >
+            Open
+          </button>
+          <button
+            type="button"
+            class="secondary"
+            :class="{ active: expenseFilter === 'completed' }"
+            @click="expenseFilter = 'completed'"
+          >
+            Completed
+          </button>
+          <button
+            type="button"
+            class="secondary"
+            :class="{ active: expenseFilter === 'all' }"
+            @click="expenseFilter = 'all'"
+          >
+            All
+          </button>
+        </div>
         <div class="list">
-          <div v-for="e in expenses" :key="e.id" class="item">
+          <div v-for="e in filteredExpenses" :key="e.id" class="item">
             <div class="row" style="justify-content: space-between">
               <strong>{{ e.category }} · {{ money(e.amount_cents, group.currency) }}</strong>
               <span class="row" style="gap: 0.4rem">
@@ -435,15 +522,20 @@ onUnmounted(() => socket?.close())
               </span>
             </div>
             <div class="muted">
-              Paid by {{ e.payer_name }} · {{ SPLIT_TYPE_LABELS[e.split_type] }}
+              Paid by
+              <PersonLink
+                :user-id="e.payer_id"
+                :name="e.payer_name || 'Unknown'"
+                :email="e.payer_email"
+              />
+              · {{ SPLIT_TYPE_LABELS[e.split_type] }}
               <span v-if="e.comment"> · {{ e.comment }}</span>
             </div>
-            <div class="muted">
-              {{
-                e.splits
-                  .map((s) => `${s.name}: ${money(s.amount_cents, group!.currency)}`)
-                  .join(' · ')
-              }}
+            <div class="muted row" style="gap: 0.35rem; flex-wrap: wrap">
+              <span v-for="s in e.splits" :key="s.user_id">
+                <PersonLink :user-id="s.user_id" :name="s.name || 'Unknown'" :email="s.email" />:
+                {{ money(s.amount_cents, group.currency) }}
+              </span>
             </div>
             <a v-if="e.receipt_path" :href="receiptUrl(e.id)" target="_blank" rel="noopener">Receipt</a>
             <div v-if="!closed && canMutateExpense(e)" class="row" style="margin-top: 0.5rem; gap: 0.5rem">
@@ -481,7 +573,9 @@ onUnmounted(() => socket?.close())
               </button>
             </div>
           </div>
-          <p v-if="!expenses.length" class="muted">No expenses yet.</p>
+          <p v-if="!filteredExpenses.length" class="muted">
+            {{ expenses.length ? 'No expenses match this filter.' : 'No expenses yet.' }}
+          </p>
         </div>
       </div>
 
@@ -575,8 +669,7 @@ onUnmounted(() => socket?.close())
             style="justify-content: space-between"
           >
             <span>
-              <strong v-if="n.user_id === auth.user?.id">You</strong>
-              <template v-else>{{ n.name }}</template>
+              <PersonLink :user-id="n.user_id" :name="n.name" :email="n.email" />
               · {{ netLabel(n.balance_cents, n.user_id === auth.user?.id) }}
             </span>
             <span :class="n.balance_cents >= 0 ? 'pos' : 'neg'">{{
@@ -591,7 +684,13 @@ onUnmounted(() => socket?.close())
         <div class="list">
           <div v-for="(t, idx) in balances?.suggested_transfers || []" :key="idx" class="item">
             <div>
-              <strong>{{ t.from_name }}</strong> pays <strong>{{ t.to_name }}</strong>:
+              <PersonLink
+                :user-id="t.from_user_id"
+                :name="t.from_name"
+                :email="t.from_email"
+              />
+              pays
+              <PersonLink :user-id="t.to_user_id" :name="t.to_name" :email="t.to_email" />:
               {{ money(t.amount_cents, group.currency) }}
             </div>
             <p v-if="transferRoleHint(t)" class="muted" style="margin: 0.35rem 0 0">
@@ -617,12 +716,55 @@ onUnmounted(() => socket?.close())
       <p class="muted">
         Debtor pays loaner. Balances update only after confirm — either party may confirm or reject.
       </p>
+      <h3 v-if="pendingSettlements.length">Pending</h3>
       <div class="list">
-        <div v-for="s in settlements" :key="s.id" class="item">
+        <div v-for="s in pendingSettlements" :key="s.id" class="item">
           <div class="row" style="justify-content: space-between; align-items: flex-start">
             <div>
               <div>
-                Debtor <strong>{{ s.from_name }}</strong> → loaner <strong>{{ s.to_name }}</strong>:
+                Debtor
+                <PersonLink
+                  :user-id="s.from_user_id"
+                  :name="s.from_name || 'Unknown'"
+                  :email="s.from_email"
+                />
+                → loaner
+                <PersonLink
+                  :user-id="s.to_user_id"
+                  :name="s.to_name || 'Unknown'"
+                  :email="s.to_email"
+                />:
+                {{ money(s.amount_cents, group.currency) }}
+              </div>
+              <div class="muted" style="margin-top: 0.35rem">{{ settlementStatusLabel(s) }}</div>
+            </div>
+            <span class="badge pending">{{ s.status }}</span>
+          </div>
+          <div v-if="canActOnSettlement(s)" class="row" style="margin-top: 0.5rem">
+            <button type="button" @click="settlementAction(s.id, 'confirm')">Confirm</button>
+            <button class="secondary" type="button" @click="settlementAction(s.id, 'reject')">Reject</button>
+          </div>
+        </div>
+        <p v-if="!pendingSettlements.length" class="muted">No pending settlements.</p>
+      </div>
+      <h3 v-if="historySettlements.length" style="margin-top: 1rem">History</h3>
+      <div v-if="historySettlements.length" class="list">
+        <div v-for="s in historySettlements" :key="s.id" class="item">
+          <div class="row" style="justify-content: space-between; align-items: flex-start">
+            <div>
+              <div>
+                Debtor
+                <PersonLink
+                  :user-id="s.from_user_id"
+                  :name="s.from_name || 'Unknown'"
+                  :email="s.from_email"
+                />
+                → loaner
+                <PersonLink
+                  :user-id="s.to_user_id"
+                  :name="s.to_name || 'Unknown'"
+                  :email="s.to_email"
+                />:
                 {{ money(s.amount_cents, group.currency) }}
               </div>
               <div class="muted" style="margin-top: 0.35rem">{{ settlementStatusLabel(s) }}</div>
@@ -630,19 +772,15 @@ onUnmounted(() => socket?.close())
             <span
               class="badge"
               :class="{
-                pending: s.status === SETTLEMENT_STATUS.PENDING,
                 closed: s.status === SETTLEMENT_STATUS.REJECTED,
+                completed: s.status === SETTLEMENT_STATUS.CONFIRMED,
               }"
               >{{ s.status }}</span
             >
           </div>
-          <div v-if="canActOnSettlement(s)" class="row" style="margin-top: 0.5rem">
-            <button type="button" @click="settlementAction(s.id, 'confirm')">Confirm</button>
-            <button class="secondary" type="button" @click="settlementAction(s.id, 'reject')">Reject</button>
-          </div>
         </div>
-        <p v-if="!settlements.length" class="muted">No settlements yet.</p>
       </div>
+      <p v-if="!settlements.length" class="muted">No settlements yet.</p>
     </section>
 
     <section v-else-if="tab === 'activity'" class="panel stack">
@@ -650,7 +788,15 @@ onUnmounted(() => socket?.close())
       <div class="list">
         <div v-for="a in activity" :key="a.id" class="item">
           <strong>{{ a.event_type }}</strong>
-          <div class="muted">{{ a.actor_name || 'system' }} · {{ new Date(a.created_at).toLocaleString() }}</div>
+          <div class="muted">
+            <PersonLink
+              v-if="a.actor_id && a.actor_name"
+              :user-id="a.actor_id"
+              :name="a.actor_name"
+            />
+            <template v-else>{{ a.actor_name || 'system' }}</template>
+            · {{ new Date(a.created_at).toLocaleString() }}
+          </div>
         </div>
       </div>
     </section>
@@ -677,7 +823,8 @@ onUnmounted(() => socket?.close())
         <h3>Members</h3>
         <div class="list">
           <div v-for="m in group.members" :key="m.user_id" class="item">
-            {{ m.name }} · {{ m.email }} · {{ m.role }}
+            <PersonLink :user-id="m.user_id" :name="m.name" :email="m.email" show-email />
+            · {{ m.role }}
           </div>
         </div>
       </div>

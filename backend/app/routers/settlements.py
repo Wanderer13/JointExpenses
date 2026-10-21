@@ -29,7 +29,9 @@ def _settlement_out(s: Settlement) -> SettlementOut:
         created_at=s.created_at,
         confirmed_at=s.confirmed_at,
         from_name=s.from_user.name if s.from_user else None,
+        from_email=s.from_user.email if s.from_user else None,
         to_name=s.to_user.name if s.to_user else None,
+        to_email=s.to_user.email if s.to_user else None,
     )
 
 

@@ -238,6 +238,31 @@ button:disabled {
   color: var(--warn);
 }
 
+.nav-badge {
+  margin-left: 0.25rem;
+  vertical-align: middle;
+}
+
+.person-link {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.45rem;
+}
+
+.person-name {
+  font-weight: 600;
+}
+
+.person-email {
+  font-size: 0.85rem;
+}
+
+button.secondary.active {
+  background: var(--accent);
+  color: #fff;
+}
+
 .tabs {
   display: flex;
   gap: 0.4rem;
