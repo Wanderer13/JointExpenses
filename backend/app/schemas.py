@@ -110,6 +110,11 @@ class InviteEmailIn(BaseModel):
     email: EmailStr
 
 
+class InviteEmailOut(BaseModel):
+    message: str
+    join_url: str
+
+
 class SplitParticipantIn(BaseModel):
     user_id: int
     amount_cents: int | None = None

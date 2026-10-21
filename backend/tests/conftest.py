@@ -13,7 +13,15 @@ from app.constants import DEFAULT_CURRENCY, DEFAULT_REMINDER_DAYS, INVITE_TOKEN_
 from app.database import Base, get_db
 from app.main import app
 from app.models import Group, GroupMember, GroupStatus, MemberRole, User
+from app.rate_limit import _buckets
 from app.security import hash_password
+
+
+@pytest.fixture(autouse=True)
+def _clear_auth_rate_limits():
+    _buckets.clear()
+    yield
+    _buckets.clear()
 
 
 @pytest.fixture()

@@ -14,10 +14,16 @@ from app.schemas import (
     GroupOut,
     GroupUpdate,
     InviteEmailIn,
+    InviteEmailOut,
     MemberOut,
-    MessageOut,
 )
 from app.services.activity_service import log_activity
+from app.services.invite_service import (
+    build_join_url,
+    clear_pending_invite,
+    invite_email_bodies,
+    upsert_pending_invite,
+)
 from app.services.mail import send_email
 from app.services.reminder_service import send_group_close_report
 from app.ws import manager
@@ -149,38 +155,44 @@ def join_by_token(
             event_type=EventType.MEMBER_JOINED,
             payload={"user_id": user.id, "name": user.name},
         )
-        db.commit()
+    clear_pending_invite(db, group.id, user.email)
+    db.commit()
     return _group_out(_load_group(db, group.id))
 
 
-@router.post("/{group_id}/invite-email", response_model=MessageOut)
+@router.post("/{group_id}/invite-email", response_model=InviteEmailOut)
 def invite_by_email(
     group_id: int,
     payload: InviteEmailIn,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> MessageOut:
+) -> InviteEmailOut:
     get_membership(db, group_id, user.id)
     group = get_group_or_404(db, group_id)
+    email = payload.email.lower()
+    join_url = build_join_url(group.invite_token)
+    text_body, html_body = invite_email_bodies(user.name, group.name, join_url, group.invite_token)
+    upsert_pending_invite(db, group.id, email)
     send_email(
-        to=payload.email.lower(),
+        to=email,
         subject=f'Invitation to group "{group.name}"',
-        body=(
-            f'{user.name} invited you to "{group.name}".\n'
-            f"Open the app and join with token: {group.invite_token}\n"
-            f"Or use path /join/{group.invite_token}\n"
-        ),
-        meta={"group_id": group.id, "invite_token": group.invite_token},
+        body=text_body,
+        body_html=html_body,
+        meta={
+            "group_id": group.id,
+            "invite_token": group.invite_token,
+            "join_url": join_url,
+        },
     )
     log_activity(
         db,
         group_id=group.id,
         actor_id=user.id,
         event_type=EventType.INVITE_SENT,
-        payload={"email": payload.email.lower()},
+        payload={"email": email, "join_url": join_url},
     )
     db.commit()
-    return MessageOut(message="Invite email sent")
+    return InviteEmailOut(message="Invite email sent", join_url=join_url)
 
 
 @router.post("/{group_id}/close", response_model=GroupOut)

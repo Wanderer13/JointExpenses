@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from unittest.mock import patch
 
 import pytest
@@ -366,3 +367,183 @@ def test_google_auth_rejects_unverified_email(client, google_client_id):
     ):
         res = client.post("/api/auth/google", json={"credential": "unverified"})
     assert res.status_code == 401
+
+
+def test_invite_email_returns_join_url_and_auto_join_on_register(client, tmp_path, monkeypatch):
+    monkeypatch.setenv("MAIL_OUTBOX_DIR", str(tmp_path))
+    monkeypatch.setenv("FRONTEND_URL", "http://127.0.0.1:5173")
+    get_settings.cache_clear()
+    try:
+        alice = _register(client, "Alice", "alice-inv@example.com")
+        ah = _auth_header(alice["access_token"])
+        group = client.post(
+            "/api/groups",
+            headers=ah,
+            json={"name": "Trip", "currency": "USD", "reminder_days": 7},
+        ).json()
+        gid = group["id"]
+        token = group["invite_token"]
+
+        invite = client.post(
+            f"/api/groups/{gid}/invite-email",
+            headers=ah,
+            json={"email": "newbie@example.com"},
+        )
+        assert invite.status_code == 200, invite.text
+        body = invite.json()
+        assert body["join_url"] == f"http://127.0.0.1:5173/join/{token}"
+        assert body["message"]
+
+        outbox_files = list(tmp_path.glob("*.json"))
+        assert len(outbox_files) == 1
+        mail = json.loads(outbox_files[0].read_text(encoding="utf-8"))
+        assert body["join_url"] in mail["body"]
+        assert body["join_url"] in mail["body_html"]
+        assert mail["meta"]["join_url"] == body["join_url"]
+
+        newbie = _register(client, "Newbie", "newbie@example.com")
+        nh = _auth_header(newbie["access_token"])
+        groups = client.get("/api/groups", headers=nh).json()
+        assert len(groups) == 1
+        assert groups[0]["id"] == gid
+        member_ids = [m["user_id"] for m in groups[0]["members"]]
+        assert newbie["user"]["id"] in member_ids
+    finally:
+        get_settings.cache_clear()
+
+
+def test_invite_auto_join_on_login(client, tmp_path, monkeypatch):
+    monkeypatch.setenv("MAIL_OUTBOX_DIR", str(tmp_path))
+    monkeypatch.setenv("FRONTEND_URL", "http://ui.test")
+    get_settings.cache_clear()
+    try:
+        alice = _register(client, "Alice", "alice-login-inv@example.com")
+        bob = _register(client, "Bob", "bob-login-inv@example.com")
+        ah = _auth_header(alice["access_token"])
+        group = client.post(
+            "/api/groups",
+            headers=ah,
+            json={"name": "Flat", "currency": "USD", "reminder_days": 7},
+        ).json()
+        assert (
+            client.post(
+                f"/api/groups/{group['id']}/invite-email",
+                headers=ah,
+                json={"email": "bob-login-inv@example.com"},
+            ).status_code
+            == 200
+        )
+
+        login = client.post(
+            "/api/auth/login",
+            json={"email": "bob-login-inv@example.com", "password": "password123"},
+        )
+        assert login.status_code == 200
+        bh = _auth_header(login.json()["access_token"])
+        groups = client.get("/api/groups", headers=bh).json()
+        assert any(g["id"] == group["id"] for g in groups)
+    finally:
+        get_settings.cache_clear()
+
+
+def test_join_by_token_clears_pending_invite(client, tmp_path, monkeypatch):
+    monkeypatch.setenv("MAIL_OUTBOX_DIR", str(tmp_path))
+    monkeypatch.setenv("FRONTEND_URL", "http://ui.test")
+    get_settings.cache_clear()
+    try:
+        alice = _register(client, "Alice", "alice-tok@example.com")
+        ah = _auth_header(alice["access_token"])
+        group = client.post(
+            "/api/groups",
+            headers=ah,
+            json={"name": "TokenJoin", "currency": "USD", "reminder_days": 7},
+        ).json()
+        # Register without pending invite first, then invite that email and join via token
+        # (register would auto-join if invite existed first)
+        erin = _register(client, "Erin", "erin-token@example.com")
+        assert (
+            client.post(
+                f"/api/groups/{group['id']}/invite-email",
+                headers=ah,
+                json={"email": "erin-token@example.com"},
+            ).status_code
+            == 200
+        )
+        eh = _auth_header(erin["access_token"])
+        # Not a member yet — invite was after register
+        assert client.get("/api/groups", headers=eh).json() == []
+        joined = client.post(f"/api/groups/join/{group['invite_token']}", headers=eh)
+        assert joined.status_code == 200
+        again = client.post(
+            "/api/auth/login",
+            json={"email": "erin-token@example.com", "password": "password123"},
+        )
+        assert again.status_code == 200
+        groups = client.get("/api/groups", headers=_auth_header(again.json()["access_token"])).json()
+        assert sum(1 for g in groups if g["id"] == group["id"]) == 1
+    finally:
+        get_settings.cache_clear()
+
+
+def test_closed_group_pending_invite_not_accepted(client, tmp_path, monkeypatch):
+    monkeypatch.setenv("MAIL_OUTBOX_DIR", str(tmp_path))
+    get_settings.cache_clear()
+    try:
+        alice = _register(client, "Alice", "alice-closed@example.com")
+        ah = _auth_header(alice["access_token"])
+        group = client.post(
+            "/api/groups",
+            headers=ah,
+            json={"name": "ClosedSoon", "currency": "USD", "reminder_days": 7},
+        ).json()
+        assert (
+            client.post(
+                f"/api/groups/{group['id']}/invite-email",
+                headers=ah,
+                json={"email": "late@example.com"},
+            ).status_code
+            == 200
+        )
+        assert client.post(f"/api/groups/{group['id']}/close", headers=ah).status_code == 200
+        late = _register(client, "Late", "late@example.com")
+        lh = _auth_header(late["access_token"])
+        groups = client.get("/api/groups", headers=lh).json()
+        assert groups == []
+    finally:
+        get_settings.cache_clear()
+
+
+def test_google_auth_accepts_pending_invite(client, google_client_id, tmp_path, monkeypatch):
+    monkeypatch.setenv("MAIL_OUTBOX_DIR", str(tmp_path))
+    get_settings.cache_clear()
+    try:
+        alice = _register(client, "Alice", "alice-g-inv@example.com")
+        ah = _auth_header(alice["access_token"])
+        group = client.post(
+            "/api/groups",
+            headers=ah,
+            json={"name": "GInvite", "currency": "USD", "reminder_days": 7},
+        ).json()
+        assert (
+            client.post(
+                f"/api/groups/{group['id']}/invite-email",
+                headers=ah,
+                json={"email": "gina-inv@gmail.com"},
+            ).status_code
+            == 200
+        )
+        claims = {
+            "sub": "google-sub-invite",
+            "email": "gina-inv@gmail.com",
+            "email_verified": True,
+            "name": "Gina Inv",
+            "iss": "https://accounts.google.com",
+        }
+        with patch("app.routers.auth.verify_google_id_token", return_value=claims):
+            res = client.post("/api/auth/google", json={"credential": "fake-id-token"})
+        assert res.status_code == 200
+        gh = _auth_header(res.json()["access_token"])
+        groups = client.get("/api/groups", headers=gh).json()
+        assert any(g["id"] == group["id"] for g in groups)
+    finally:
+        get_settings.cache_clear()

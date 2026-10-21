@@ -92,7 +92,7 @@ Never commit a Google **client secret** (`GOCSPX-…`) — this app only needs t
 ## What works
 
 - Registration / login (JWT in httpOnly cookies + Bearer), refresh/logout, optional Google Sign-In
-- Groups: create, members, invite by link and email, close/reopen; one currency per group
+- Groups: create, members, invite by link and email (absolute join URL + HTML), auto-join on register/login when email was invited; close/reopen; one currency per group
 - Expenses: equal / shares / exact, category, date, comment, receipt; **create / edit / delete** (payer, creator, or owner)
 - Balances per group and across all groups; suggested transfers (greedy)
 - Settlements: pending → confirm/reject by recipient; amount capped to outstanding debt; only confirmed affect balances
@@ -105,8 +105,10 @@ Never commit a Google **client secret** (`GOCSPX-…`) — this app only needs t
 
 ## Mail
 
-- `MAIL_BACKEND=stub` (default): JSON files under `backend/mail_outbox/`
+- `MAIL_BACKEND=stub` (default): JSON files under `backend/mail_outbox/` (`body`, `body_html`, `meta.join_url`)
 - `MAIL_BACKEND=smtp`: real SMTP via `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_TLS`
+- `FRONTEND_URL`: public UI origin for invite links (default local Vite `http://127.0.0.1:5173`; Compose `http://localhost:8080`)
+- After **Invite by email**, the UI also shows the join link (handy for stub). Logging in or registering with that email auto-joins open groups; or open `/join/{token}`
 
 ## Out of scope / next steps
 

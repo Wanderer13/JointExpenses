@@ -20,6 +20,7 @@ services:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-expenses}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-expenses}
       SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
       UPLOAD_DIR: /app/uploads
       MAIL_OUTBOX_DIR: /app/mail_outbox
       MAIL_BACKEND: ${MAIL_BACKEND:-stub}

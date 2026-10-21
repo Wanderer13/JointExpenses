@@ -24,6 +24,7 @@ from app.security import (
     verify_password,
 )
 from app.services.google_auth import GoogleAuthError, verify_google_id_token
+from app.services.invite_service import accept_pending_invites
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -75,6 +76,8 @@ def register(
         password_hash=hash_password(payload.password),
     )
     db.add(user)
+    db.flush()
+    accept_pending_invites(db, user)
     db.commit()
     db.refresh(user)
     return _issue_tokens(response, db, user)
@@ -95,6 +98,8 @@ def login(
         or not verify_password(payload.password, user.password_hash)
     ):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+    accept_pending_invites(db, user)
+    db.commit()
     return _issue_tokens(response, db, user)
 
 
@@ -150,6 +155,8 @@ def google_auth(
             )
             db.add(user)
 
+    db.flush()
+    accept_pending_invites(db, user)
     db.commit()
     db.refresh(user)
     return _issue_tokens(response, db, user)

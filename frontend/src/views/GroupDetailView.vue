@@ -37,6 +37,8 @@ const settlements = ref<Settlement[]>([])
 const activity = ref<Activity[]>([])
 const error = ref('')
 const inviteEmail = ref('')
+const inviteSentUrl = ref('')
+const inviteSentMessage = ref('')
 const joinToken = ref('')
 const editCurrency = ref(DEFAULT_CURRENCY)
 const currencySaving = ref(false)
@@ -234,12 +236,24 @@ async function settlementAction(id: number, action: 'confirm' | 'reject') {
 
 async function invite() {
   if (!group.value) return
-  await api(`/api/groups/${group.value.id}/invite-email`, {
-    method: 'POST',
-    body: JSON.stringify({ email: inviteEmail.value }),
-  })
-  inviteEmail.value = ''
-  await refreshAll()
+  error.value = ''
+  inviteSentMessage.value = ''
+  inviteSentUrl.value = ''
+  try {
+    const res = await api<{ message: string; join_url: string }>(
+      `/api/groups/${group.value.id}/invite-email`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ email: inviteEmail.value }),
+      },
+    )
+    inviteSentMessage.value = res.message
+    inviteSentUrl.value = res.join_url
+    inviteEmail.value = ''
+    await refreshAll()
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Failed to send invite'
+  }
 }
 
 async function joinWithToken() {
@@ -529,6 +543,10 @@ onUnmounted(() => socket?.close())
         <label>Invite by email <input v-model="inviteEmail" type="email" required /></label>
         <button type="submit">Send invite</button>
       </form>
+      <p v-if="inviteSentMessage" class="muted">
+        {{ inviteSentMessage }}. Share this link (also in the email / mail stub):
+        <code>{{ inviteSentUrl }}</code>
+      </p>
       <form class="stack" @submit.prevent="joinWithToken">
         <label>Or join with token <input v-model="joinToken" required /></label>
         <button class="secondary" type="submit">Join</button>

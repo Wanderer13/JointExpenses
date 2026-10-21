@@ -13,16 +13,30 @@ from app.constants import MAIL_BACKEND_SMTP, MAIL_BACKEND_STUB
 logger = logging.getLogger(__name__)
 
 
-def send_email(to: str, subject: str, body: str, meta: dict | None = None) -> Path | None:
+def send_email(
+    to: str,
+    subject: str,
+    body: str,
+    meta: dict | None = None,
+    *,
+    body_html: str | None = None,
+) -> Path | None:
     settings = get_settings()
     backend = (settings.mail_backend or MAIL_BACKEND_STUB).lower()
     if backend == MAIL_BACKEND_SMTP:
-        _send_smtp(to, subject, body)
+        _send_smtp(to, subject, body, body_html=body_html)
         return None
-    return _send_stub(to, subject, body, meta)
+    return _send_stub(to, subject, body, meta, body_html=body_html)
 
 
-def _send_stub(to: str, subject: str, body: str, meta: dict | None) -> Path:
+def _send_stub(
+    to: str,
+    subject: str,
+    body: str,
+    meta: dict | None,
+    *,
+    body_html: str | None = None,
+) -> Path:
     settings = get_settings()
     outbox = Path(settings.mail_outbox_dir)
     outbox.mkdir(parents=True, exist_ok=True)
@@ -33,6 +47,7 @@ def _send_stub(to: str, subject: str, body: str, meta: dict | None) -> Path:
         "to": to,
         "subject": subject,
         "body": body,
+        "body_html": body_html,
         "meta": meta or {},
         "sent_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -41,7 +56,7 @@ def _send_stub(to: str, subject: str, body: str, meta: dict | None) -> Path:
     return path
 
 
-def _send_smtp(to: str, subject: str, body: str) -> None:
+def _send_smtp(to: str, subject: str, body: str, *, body_html: str | None = None) -> None:
     settings = get_settings()
     if not settings.smtp_host:
         raise RuntimeError("SMTP_HOST is not configured")
@@ -50,6 +65,8 @@ def _send_smtp(to: str, subject: str, body: str) -> None:
     msg["From"] = settings.smtp_from or settings.smtp_user or "noreply@localhost"
     msg["To"] = to
     msg.set_content(body)
+    if body_html:
+        msg.add_alternative(body_html, subtype="html")
 
     if settings.smtp_tls:
         with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=30) as server:
