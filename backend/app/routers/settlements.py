@@ -157,8 +157,11 @@ async def settlement_action(
     get_membership(db, settlement.group_id, user.id)
     if settlement.status != SettlementStatus.pending:
         raise HTTPException(status_code=400, detail="Settlement is not pending")
-    if user.id != settlement.to_user_id:
-        raise HTTPException(status_code=403, detail="Only recipient can confirm or reject")
+    if user.id not in (settlement.from_user_id, settlement.to_user_id):
+        raise HTTPException(
+            status_code=403,
+            detail="Only debtor or loaner can confirm or reject",
+        )
 
     if payload.action == "confirm":
         settlement.status = SettlementStatus.confirmed
@@ -170,6 +173,11 @@ async def settlement_action(
         event_type = EventType.SETTLEMENT_REJECTED
         admin_action = "settlement.reject"
 
+    other_party = (
+        settlement.to_user_id
+        if user.id == settlement.from_user_id
+        else settlement.from_user_id
+    )
     log_activity(
         db,
         group_id=settlement.group_id,
@@ -179,7 +187,7 @@ async def settlement_action(
     )
     notify_users(
         db,
-        user_ids=[settlement.from_user_id],
+        user_ids=[other_party],
         notification_type=event_type,
         payload={"group_id": settlement.group_id, "settlement_id": settlement.id},
     )

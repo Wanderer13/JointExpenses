@@ -15,6 +15,8 @@ from app.models import (
     ExpenseSplit,
     Group,
     GroupMember,
+    Notification,
+    RefreshToken,
     ReminderSent,
     Settlement,
     User,
@@ -104,6 +106,13 @@ def clear_linked_users(db: Session, *, actor: User) -> tuple[list[int], int]:
         synchronize_session=False,
     )
     db.query(GroupMember).filter(GroupMember.user_id.in_(victim_ids)).delete(
+        synchronize_session=False
+    )
+    # Notifications.user_id is NOT NULL — must delete, not nullify via ORM relationship.
+    db.query(Notification).filter(Notification.user_id.in_(victim_ids)).delete(
+        synchronize_session=False
+    )
+    db.query(RefreshToken).filter(RefreshToken.user_id.in_(victim_ids)).delete(
         synchronize_session=False
     )
     db.query(AdminActionLog).filter(AdminActionLog.actor_id.in_(victim_ids)).update(

@@ -15,7 +15,7 @@ from app.constants import (
     MIN_REMINDER_DAYS,
 )
 from app.currencies import is_allowed_currency, normalize_currency
-from app.models import AppRole, GroupStatus, MemberRole, SettlementStatus, SplitType
+from app.models import AppRole, ExpenseStatus, GroupStatus, MemberRole, SettlementStatus, SplitType
 
 
 class UserCreate(BaseModel):
@@ -173,6 +173,7 @@ class ExpenseUpdate(BaseModel):
     category: str | None = None
     expense_date: date | None = None
     comment: str | None = None
+    status: ExpenseStatus | None = None
 
 
 class SplitOut(BaseModel):
@@ -197,6 +198,7 @@ class ExpenseOut(BaseModel):
     expense_date: date
     comment: str | None
     receipt_path: str | None
+    status: ExpenseStatus
     created_at: datetime
     updated_at: datetime
     splits: list[SplitOut] = []

@@ -24,6 +24,11 @@ export const SETTLEMENT_STATUS = {
   REJECTED: 'rejected',
 } as const
 
+export const EXPENSE_STATUS = {
+  OPEN: 'open',
+  COMPLETED: 'completed',
+} as const
+
 export const SPLIT_TYPE = {
   EQUAL: 'equal',
   SHARES: 'shares',

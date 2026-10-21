@@ -134,3 +134,39 @@ def test_cannot_demote_last_admin(client, db):
     )
     assert res.status_code == 400
     assert "last admin" in res.json()["detail"].lower()
+
+
+def test_clear_linked_with_notifications_and_tokens(client, db, monkeypatch):
+    """Regression: ORM must not nullify notifications.user_id (NOT NULL)."""
+    monkeypatch.setenv("ADMIN_EMAILS", "cleaner@example.com")
+    get_settings.cache_clear()
+    try:
+        from app.models import Notification
+        from app.security import issue_refresh_token
+
+        boss = _register(client, "Cleaner", "cleaner@example.com")
+        target = _register(client, "Doomed", "doomed@example.com")
+        doomed = db.query(User).filter(User.email == "doomed@example.com").first()
+        assert doomed is not None
+        doomed_id = doomed.id
+        db.add(
+            Notification(
+                user_id=doomed_id,
+                notification_type="test",
+                payload="{}",
+            )
+        )
+        issue_refresh_token(db, doomed_id)
+        db.commit()
+
+        clear = client.post(
+            "/api/admin/users/clear-linked",
+            headers=_auth(boss["access_token"]),
+        )
+        assert clear.status_code == 200, clear.text
+        assert clear.json()["deleted_count"] >= 1
+        db.expire_all()
+        assert db.query(User).filter(User.email == "doomed@example.com").first() is None
+        assert db.query(Notification).filter(Notification.user_id == doomed_id).count() == 0
+    finally:
+        get_settings.cache_clear()

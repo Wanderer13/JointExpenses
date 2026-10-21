@@ -229,11 +229,13 @@ def test_closed_group_blocks_expenses(client):
     assert ok.status_code == 200
 
 
-def test_settlement_only_recipient_can_confirm(client):
+def test_settlement_either_party_can_confirm(client):
     alice = _register(client, "Alice", "s1@example.com")
     bob = _register(client, "Bob", "s2@example.com")
+    cara = _register(client, "Cara", "s3@example.com")
     ah = _auth_header(alice["access_token"])
     bh = _auth_header(bob["access_token"])
+    ch = _auth_header(cara["access_token"])
 
     group = client.post(
         "/api/groups",
@@ -242,6 +244,7 @@ def test_settlement_only_recipient_can_confirm(client):
     ).json()
     token = group["invite_token"]
     client.post(f"/api/groups/join/{token}", headers=bh)
+    client.post(f"/api/groups/join/{token}", headers=ch)
     gid = group["id"]
 
     client.post(
@@ -269,19 +272,153 @@ def test_settlement_only_recipient_can_confirm(client):
         },
     ).json()
 
+    # Third party cannot confirm
     forbidden = client.post(
         f"/api/settlements/{settlement['id']}/action",
-        headers=bh,
+        headers=ch,
         json={"action": "confirm"},
     )
     assert forbidden.status_code == 403
 
+    # Debtor (from_user) can confirm
     ok = client.post(
         f"/api/settlements/{settlement['id']}/action",
-        headers=ah,
+        headers=bh,
         json={"action": "confirm"},
     )
     assert ok.status_code == 200
+    assert ok.json()["status"] == "confirmed"
+
+
+def test_expense_complete_and_member_can_mutate(client):
+    alice = _register(client, "Alice", "e1@example.com")
+    bob = _register(client, "Bob", "e2@example.com")
+    ah = _auth_header(alice["access_token"])
+    bh = _auth_header(bob["access_token"])
+
+    group = client.post(
+        "/api/groups",
+        headers=ah,
+        json={"name": "Pair", "currency": "USD", "reminder_days": 7},
+    ).json()
+    client.post(f"/api/groups/join/{group['invite_token']}", headers=bh)
+    gid = group["id"]
+
+    created = client.post(
+        f"/api/groups/{gid}/expenses",
+        headers=ah,
+        json={
+            "payer_id": alice["user"]["id"],
+            "amount_cents": 200,
+            "split_type": "equal",
+            "participants": [
+                {"user_id": alice["user"]["id"]},
+                {"user_id": bob["user"]["id"]},
+            ],
+            "category": "food",
+            "expense_date": "2026-10-01",
+        },
+    )
+    assert created.status_code == 200
+    expense = created.json()
+    assert expense["status"] == "open"
+    eid = expense["id"]
+
+    # Other member can complete
+    done = client.patch(
+        f"/api/expenses/{eid}",
+        headers=bh,
+        json={"status": "completed"},
+    )
+    assert done.status_code == 200
+    assert done.json()["status"] == "completed"
+
+    # Cannot edit amounts while completed
+    blocked = client.patch(
+        f"/api/expenses/{eid}",
+        headers=bh,
+        json={"category": "taxi"},
+    )
+    assert blocked.status_code == 400
+
+    # Reopen then other member can edit
+    reopen = client.patch(
+        f"/api/expenses/{eid}",
+        headers=bh,
+        json={"status": "open"},
+    )
+    assert reopen.status_code == 200
+    edited = client.patch(
+        f"/api/expenses/{eid}",
+        headers=bh,
+        json={"category": "taxi"},
+    )
+    assert edited.status_code == 200
+    assert edited.json()["category"] == "taxi"
+
+
+def test_update_expense_amount_after_new_member(client):
+    """Regression: replacing splits must not UNIQUE-fail on expense_id+user_id."""
+    alice = _register(client, "Alice", "upd1@example.com")
+    bob = _register(client, "Bob", "upd2@example.com")
+    cara = _register(client, "Cara", "upd3@example.com")
+    ah = _auth_header(alice["access_token"])
+    bh = _auth_header(bob["access_token"])
+    ch = _auth_header(cara["access_token"])
+
+    group = client.post(
+        "/api/groups",
+        headers=ah,
+        json={"name": "Upd", "currency": "USD", "reminder_days": 7},
+    ).json()
+    token = group["invite_token"]
+    gid = group["id"]
+    assert client.post(f"/api/groups/join/{token}", headers=bh).status_code == 200
+
+    created = client.post(
+        f"/api/groups/{gid}/expenses",
+        headers=ah,
+        json={
+            "payer_id": alice["user"]["id"],
+            "amount_cents": 1000,
+            "split_type": "equal",
+            "participants": [
+                {"user_id": alice["user"]["id"]},
+                {"user_id": bob["user"]["id"]},
+            ],
+            "category": "food",
+            "expense_date": "2026-10-01",
+        },
+    )
+    assert created.status_code == 200, created.text
+    eid = created.json()["id"]
+
+    assert client.post(f"/api/groups/join/{token}", headers=ch).status_code == 200
+
+    updated = client.patch(
+        f"/api/expenses/{eid}",
+        headers=ah,
+        json={
+            "payer_id": alice["user"]["id"],
+            "amount_cents": 2500,
+            "split_type": "equal",
+            "participants": [
+                {"user_id": alice["user"]["id"]},
+                {"user_id": bob["user"]["id"]},
+            ],
+            "category": "food",
+            "expense_date": "2026-10-01",
+            "comment": None,
+        },
+    )
+    assert updated.status_code == 200, updated.text
+    body = updated.json()
+    assert body["amount_cents"] == 2500
+    assert {s["user_id"] for s in body["splits"]} == {
+        alice["user"]["id"],
+        bob["user"]["id"],
+    }
+    assert sum(s["amount_cents"] for s in body["splits"]) == 2500
 
 
 @pytest.fixture()

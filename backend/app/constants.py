@@ -85,6 +85,8 @@ class EventType:
     EXPENSE_CREATED = "expense_created"
     EXPENSE_UPDATED = "expense_updated"
     EXPENSE_DELETED = "expense_deleted"
+    EXPENSE_COMPLETED = "expense_completed"
+    EXPENSE_REOPENED = "expense_reopened"
     SETTLEMENT_PENDING = "settlement_pending"
     SETTLEMENT_CONFIRMED = "settlement_confirmed"
     SETTLEMENT_REJECTED = "settlement_rejected"

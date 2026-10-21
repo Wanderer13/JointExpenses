@@ -11,7 +11,7 @@ from app.config import get_settings
 from app.constants import ALLOWED_RECEIPT_SUFFIXES, BYTES_PER_MEBIBYTE, EventType, WsMessageType
 from app.database import get_db
 from app.deps import get_current_user, get_group_or_404, get_membership, require_expense_mutator
-from app.models import Expense, ExpenseSplit, GroupMember, GroupStatus, SplitType, User
+from app.models import Expense, ExpenseSplit, ExpenseStatus, GroupMember, GroupStatus, SplitType, User
 from app.schemas import ExpenseCreate, ExpenseOut, ExpenseUpdate, SplitOut, SplitParticipantIn
 from app.services.activity_service import log_activity, notify_users
 from app.services.admin_action_log import log_user_action
@@ -33,6 +33,7 @@ def _expense_out(expense: Expense) -> ExpenseOut:
         expense_date=expense.expense_date,
         comment=expense.comment,
         receipt_path=expense.receipt_path,
+        status=expense.status,
         created_at=expense.created_at,
         updated_at=expense.updated_at,
         payer_name=expense.payer.name if expense.payer else None,
@@ -46,6 +47,14 @@ def _expense_out(expense: Expense) -> ExpenseOut:
             for s in expense.splits
         ],
     )
+
+
+def _require_expense_open(expense: Expense) -> None:
+    if expense.status == ExpenseStatus.completed:
+        raise HTTPException(
+            status_code=400,
+            detail="Expense is completed — reopen it before editing",
+        )
 
 
 def _load_expense(db: Session, expense_id: int) -> Expense:
@@ -64,6 +73,7 @@ def _load_expense(db: Session, expense_id: int) -> Expense:
 
 
 def _apply_splits(
+    db: Session,
     expense: Expense,
     amount_cents: int,
     split_type: SplitType,
@@ -74,7 +84,9 @@ def _apply_splits(
         if p.user_id not in member_ids:
             raise HTTPException(status_code=400, detail=f"User {p.user_id} is not a group member")
     amounts = compute_split_amounts(amount_cents, split_type, participants)
+    # clear() alone can INSERT before DELETE in one flush → UNIQUE(expense_id, user_id)
     expense.splits.clear()
+    db.flush()
     for user_id, cents, shares in amounts:
         expense.splits.append(ExpenseSplit(user_id=user_id, amount_cents=cents, shares=shares))
 
@@ -128,7 +140,9 @@ async def create_expense(
     )
     db.add(expense)
     db.flush()
-    _apply_splits(expense, payload.amount_cents, payload.split_type, payload.participants, member_ids)
+    _apply_splits(
+        db, expense, payload.amount_cents, payload.split_type, payload.participants, member_ids
+    )
 
     involved = {payload.payer_id, *[p.user_id for p in payload.participants]}
     log_activity(
@@ -178,6 +192,20 @@ async def update_expense(
     group = get_group_or_404(db, expense.group_id)
     if group.status == GroupStatus.closed:
         raise HTTPException(status_code=400, detail="Group is closed")
+
+    status_only = (
+        payload.status is not None
+        and payload.payer_id is None
+        and payload.amount_cents is None
+        and payload.split_type is None
+        and payload.participants is None
+        and payload.category is None
+        and payload.expense_date is None
+        and payload.comment is None
+    )
+    if not status_only:
+        _require_expense_open(expense)
+
     member_ids = {
         m.user_id
         for m in db.query(GroupMember).filter(GroupMember.group_id == expense.group_id).all()
@@ -198,6 +226,10 @@ async def update_expense(
     if payload.comment is not None:
         expense.comment = payload.comment
 
+    previous_status = expense.status
+    if payload.status is not None:
+        expense.status = payload.status
+
     if payload.participants is not None or payload.amount_cents is not None or payload.split_type is not None:
         participants = payload.participants
         if participants is None:
@@ -205,33 +237,58 @@ async def update_expense(
                 SplitParticipantIn(user_id=s.user_id, amount_cents=s.amount_cents, shares=s.shares)
                 for s in expense.splits
             ]
-        _apply_splits(expense, expense.amount_cents, expense.split_type, participants, member_ids)
+        _apply_splits(
+            db, expense, expense.amount_cents, expense.split_type, participants, member_ids
+        )
 
     involved = {expense.payer_id, *[s.user_id for s in expense.splits]}
+    if payload.status is not None and payload.status != previous_status:
+        event_type = (
+            EventType.EXPENSE_COMPLETED
+            if payload.status == ExpenseStatus.completed
+            else EventType.EXPENSE_REOPENED
+        )
+        admin_action = (
+            "expense.complete"
+            if payload.status == ExpenseStatus.completed
+            else "expense.reopen"
+        )
+    else:
+        event_type = EventType.EXPENSE_UPDATED
+        admin_action = "expense.update"
     log_activity(
         db,
         group_id=expense.group_id,
         actor_id=user.id,
-        event_type=EventType.EXPENSE_UPDATED,
-        payload={"expense_id": expense.id, "amount_cents": expense.amount_cents},
+        event_type=event_type,
+        payload={
+            "expense_id": expense.id,
+            "amount_cents": expense.amount_cents,
+            "status": expense.status.value,
+        },
     )
     notify_users(
         db,
         user_ids=[uid for uid in involved if uid != user.id],
-        notification_type=EventType.EXPENSE_UPDATED,
+        notification_type=event_type,
         payload={
             "group_id": expense.group_id,
             "expense_id": expense.id,
             "amount_cents": expense.amount_cents,
+            "status": expense.status.value,
         },
     )
     log_user_action(
         db,
         actor=user,
-        action="expense.update",
+        action=admin_action,
         target_type="expense",
         target_id=expense.id,
-        payload={"group_id": expense.group_id, "amount_cents": expense.amount_cents},
+        payload={
+            "group_id": expense.group_id,
+            "amount_cents": expense.amount_cents,
+            "status": expense.status.value,
+        },
     )
     db.commit()
     out = _expense_out(_load_expense(db, expense.id))
@@ -259,6 +316,7 @@ async def delete_expense(
     group = get_group_or_404(db, expense.group_id)
     if group.status == GroupStatus.closed:
         raise HTTPException(status_code=400, detail="Group is closed")
+    _require_expense_open(expense)
     group_id = expense.group_id
     involved = {expense.payer_id, *[s.user_id for s in expense.splits]}
     log_activity(
@@ -323,6 +381,10 @@ async def upload_receipt(
         payer_id=expense.payer_id,
         created_by_id=expense.created_by_id,
     )
+    group = get_group_or_404(db, expense.group_id)
+    if group.status == GroupStatus.closed:
+        raise HTTPException(status_code=400, detail="Group is closed")
+    _require_expense_open(expense)
     suffix = Path(file.filename or "receipt.bin").suffix.lower()
     if suffix not in ALLOWED_RECEIPT_SUFFIXES:
         raise HTTPException(

@@ -7,6 +7,7 @@ import {
   DEFAULT_CATEGORY,
   DEFAULT_CURRENCY,
   DEFAULT_SPLIT_TYPE,
+  EXPENSE_STATUS,
   GROUP_STATUS,
   MEMBER_ROLE,
   SETTLEMENT_STATUS,
@@ -68,9 +69,45 @@ const inviteLink = computed(() =>
 )
 const formTitle = computed(() => (editingExpenseId.value ? 'Edit expense' : 'Add expense'))
 
-function canMutateExpense(e: Expense): boolean {
-  if (!auth.user) return false
-  return isOwner.value || e.payer_id === auth.user.id || e.created_by_id === auth.user.id
+function canMutateExpense(_e: Expense): boolean {
+  return Boolean(auth.user && group.value)
+}
+
+function isExpenseOpen(e: Expense): boolean {
+  return e.status !== EXPENSE_STATUS.COMPLETED
+}
+
+function netLabel(balanceCents: number, isYou: boolean): string {
+  if (balanceCents === 0) return isYou ? 'You are settled' : 'Settled'
+  if (balanceCents < 0) {
+    return isYou ? 'You owe' : 'Owes'
+  }
+  return isYou ? 'You are owed' : 'Is owed'
+}
+
+function settlementStatusLabel(s: Settlement): string {
+  const debtor = s.from_name || 'Debtor'
+  const loaner = s.to_name || 'Loaner'
+  if (s.status === SETTLEMENT_STATUS.PENDING) {
+    return `Pending — debtor ${debtor} pays loaner ${loaner} (either party can confirm)`
+  }
+  if (s.status === SETTLEMENT_STATUS.CONFIRMED) {
+    const when = s.confirmed_at ? ` · ${new Date(s.confirmed_at).toLocaleString()}` : ''
+    return `Confirmed — ${debtor} paid ${loaner}${when}`
+  }
+  return `Rejected — ${debtor} → ${loaner}`
+}
+
+function transferRoleHint(t: { from_user_id: number; to_user_id: number }): string {
+  if (!auth.user) return ''
+  if (auth.user.id === t.from_user_id) return 'You owe this amount (debtor).'
+  if (auth.user.id === t.to_user_id) return 'You are owed this amount (loaner).'
+  return ''
+}
+
+function canActOnSettlement(s: Settlement): boolean {
+  if (!auth.user || s.status !== SETTLEMENT_STATUS.PENDING) return false
+  return auth.user.id === s.from_user_id || auth.user.id === s.to_user_id
 }
 
 function resetExpenseForm() {
@@ -92,6 +129,7 @@ function resetExpenseForm() {
 }
 
 function startEdit(e: Expense) {
+  if (!isExpenseOpen(e)) return
   editingExpenseId.value = e.id
   amount.value = formatMajorInput(e.amount_cents)
   category.value = e.category
@@ -123,7 +161,10 @@ async function refreshAll() {
   if (group.value) {
     editCurrency.value = group.value.currency
     for (const m of group.value.members) {
-      if (selected.value[m.user_id] === undefined) selected.value[m.user_id] = true
+      // While editing, do not auto-include newly joined members in the split.
+      if (selected.value[m.user_id] === undefined) {
+        selected.value[m.user_id] = editingExpenseId.value == null
+      }
       if (!shares.value[m.user_id]) shares.value[m.user_id] = 1
       if (!exact.value[m.user_id]) exact.value[m.user_id] = ''
     }
@@ -197,6 +238,22 @@ async function deleteExpense(expenseId: number) {
   try {
     await api(`/api/expenses/${expenseId}`, { method: 'DELETE' })
     if (editingExpenseId.value === expenseId) resetExpenseForm()
+    await refreshAll()
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Failed'
+  }
+}
+
+async function setExpenseStatus(expenseId: number, status: 'open' | 'completed') {
+  error.value = ''
+  try {
+    await api(`/api/expenses/${expenseId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    })
+    if (status === EXPENSE_STATUS.COMPLETED && editingExpenseId.value === expenseId) {
+      resetExpenseForm()
+    }
     await refreshAll()
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed'
@@ -360,11 +417,22 @@ onUnmounted(() => socket?.close())
     <section v-if="tab === 'expenses'" class="grid-2">
       <div class="panel stack">
         <h2>Expenses</h2>
+        <p class="muted">
+          Completing an expense marks it done. To clear what someone owes, use
+          <strong>Balances</strong> (propose) then <strong>Settlements</strong> (confirm).
+        </p>
         <div class="list">
           <div v-for="e in expenses" :key="e.id" class="item">
             <div class="row" style="justify-content: space-between">
               <strong>{{ e.category }} · {{ money(e.amount_cents, group.currency) }}</strong>
-              <span class="muted">{{ e.expense_date }}</span>
+              <span class="row" style="gap: 0.4rem">
+                <span
+                  class="badge"
+                  :class="{ completed: e.status === EXPENSE_STATUS.COMPLETED }"
+                  >{{ e.status }}</span
+                >
+                <span class="muted">{{ e.expense_date }}</span>
+              </span>
             </div>
             <div class="muted">
               Paid by {{ e.payer_name }} · {{ SPLIT_TYPE_LABELS[e.split_type] }}
@@ -379,8 +447,38 @@ onUnmounted(() => socket?.close())
             </div>
             <a v-if="e.receipt_path" :href="receiptUrl(e.id)" target="_blank" rel="noopener">Receipt</a>
             <div v-if="!closed && canMutateExpense(e)" class="row" style="margin-top: 0.5rem; gap: 0.5rem">
-              <button class="secondary" type="button" @click="startEdit(e)">Edit</button>
-              <button class="danger" type="button" @click="deleteExpense(e.id)">Delete</button>
+              <button
+                v-if="isExpenseOpen(e)"
+                class="secondary"
+                type="button"
+                @click="setExpenseStatus(e.id, EXPENSE_STATUS.COMPLETED)"
+              >
+                Complete
+              </button>
+              <button
+                v-else
+                class="secondary"
+                type="button"
+                @click="setExpenseStatus(e.id, EXPENSE_STATUS.OPEN)"
+              >
+                Reopen
+              </button>
+              <button
+                v-if="isExpenseOpen(e)"
+                class="secondary"
+                type="button"
+                @click="startEdit(e)"
+              >
+                Edit
+              </button>
+              <button
+                v-if="isExpenseOpen(e)"
+                class="danger"
+                type="button"
+                @click="deleteExpense(e.id)"
+              >
+                Delete
+              </button>
             </div>
           </div>
           <p v-if="!expenses.length" class="muted">No expenses yet.</p>
@@ -465,23 +563,40 @@ onUnmounted(() => socket?.close())
     <section v-else-if="tab === 'balances'" class="grid-2">
       <div class="panel stack">
         <h2>Net balances</h2>
-        <p class="muted">Sum check: {{ balances?.sum_check ?? 0 }} (must be 0)</p>
+        <p class="muted">
+          Your final position in this group after expenses and confirmed settlements. Sum check:
+          {{ balances?.sum_check ?? 0 }} (must be 0).
+        </p>
         <div class="list">
-          <div v-for="n in balances?.nets || []" :key="n.user_id" class="item row" style="justify-content: space-between">
-            <span>{{ n.name }}</span>
-            <span :class="n.balance_cents >= 0 ? 'pos' : 'neg'">{{ money(n.balance_cents, group.currency) }}</span>
+          <div
+            v-for="n in balances?.nets || []"
+            :key="n.user_id"
+            class="item row"
+            style="justify-content: space-between"
+          >
+            <span>
+              <strong v-if="n.user_id === auth.user?.id">You</strong>
+              <template v-else>{{ n.name }}</template>
+              · {{ netLabel(n.balance_cents, n.user_id === auth.user?.id) }}
+            </span>
+            <span :class="n.balance_cents >= 0 ? 'pos' : 'neg'">{{
+              money(Math.abs(n.balance_cents), group.currency)
+            }}</span>
           </div>
         </div>
       </div>
       <div class="panel stack">
         <h2>Suggested transfers</h2>
-        <p class="muted">Minimal set so everyone is settled.</p>
+        <p class="muted">Who pays whom to settle. Propose, then confirm on Settlements.</p>
         <div class="list">
           <div v-for="(t, idx) in balances?.suggested_transfers || []" :key="idx" class="item">
             <div>
-              <strong>{{ t.from_name }}</strong> → <strong>{{ t.to_name }}</strong>:
+              <strong>{{ t.from_name }}</strong> pays <strong>{{ t.to_name }}</strong>:
               {{ money(t.amount_cents, group.currency) }}
             </div>
+            <p v-if="transferRoleHint(t)" class="muted" style="margin: 0.35rem 0 0">
+              {{ transferRoleHint(t) }}
+            </p>
             <button
               v-if="!closed && auth.user && (auth.user.id === t.from_user_id || auth.user.id === t.to_user_id)"
               class="secondary"
@@ -499,22 +614,29 @@ onUnmounted(() => socket?.close())
 
     <section v-else-if="tab === 'settlements'" class="panel stack">
       <h2>Settlements</h2>
-      <p class="muted">Count only after the recipient confirms.</p>
+      <p class="muted">
+        Debtor pays loaner. Balances update only after confirm — either party may confirm or reject.
+      </p>
       <div class="list">
         <div v-for="s in settlements" :key="s.id" class="item">
-          <div class="row" style="justify-content: space-between">
+          <div class="row" style="justify-content: space-between; align-items: flex-start">
+            <div>
+              <div>
+                Debtor <strong>{{ s.from_name }}</strong> → loaner <strong>{{ s.to_name }}</strong>:
+                {{ money(s.amount_cents, group.currency) }}
+              </div>
+              <div class="muted" style="margin-top: 0.35rem">{{ settlementStatusLabel(s) }}</div>
+            </div>
             <span
-              >{{ s.from_name }} → {{ s.to_name }}: {{ money(s.amount_cents, group.currency) }}</span
+              class="badge"
+              :class="{
+                pending: s.status === SETTLEMENT_STATUS.PENDING,
+                closed: s.status === SETTLEMENT_STATUS.REJECTED,
+              }"
+              >{{ s.status }}</span
             >
-            <span class="badge" :class="{ pending: s.status === SETTLEMENT_STATUS.PENDING }">{{
-              s.status
-            }}</span>
           </div>
-          <div
-            v-if="s.status === SETTLEMENT_STATUS.PENDING && auth.user?.id === s.to_user_id"
-            class="row"
-            style="margin-top: 0.5rem"
-          >
+          <div v-if="canActOnSettlement(s)" class="row" style="margin-top: 0.5rem">
             <button type="button" @click="settlementAction(s.id, 'confirm')">Confirm</button>
             <button class="secondary" type="button" @click="settlementAction(s.id, 'reject')">Reject</button>
           </div>

@@ -65,6 +65,8 @@ export const SPLIT_TYPE_LABELS: Record<SplitType, string> = {
   exact: 'Exact amounts',
 }
 
+export type ExpenseStatus = 'open' | 'completed'
+
 export interface Expense {
   id: number
   group_id: number
@@ -76,6 +78,7 @@ export interface Expense {
   expense_date: string
   comment: string | null
   receipt_path: string | null
+  status: ExpenseStatus
   created_at: string
   updated_at: string
   splits: Split[]

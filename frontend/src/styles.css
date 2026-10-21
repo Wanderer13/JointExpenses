@@ -22,7 +22,7 @@
 html,
 body,
 #app {
-  min-height: 100%;
+  min-height: 100vh;
 }
 
 body {
@@ -102,11 +102,29 @@ textarea {
   display: grid;
   grid-template-columns: 1.2fr 1fr;
   gap: 1rem;
+  align-items: start;
+}
+
+.grid-2 > :nth-child(1) {
+  order: 1;
+}
+
+.grid-2 > :nth-child(2) {
+  order: 2;
 }
 
 @media (max-width: 860px) {
   .grid-2 {
     grid-template-columns: 1fr;
+  }
+
+  /* Form / actions first on narrow screens */
+  .grid-2 > :nth-child(1) {
+    order: 2;
+  }
+
+  .grid-2 > :nth-child(2) {
+    order: 1;
   }
 }
 
@@ -208,6 +226,11 @@ button:disabled {
 .badge.closed {
   background: #ffe4e6;
   color: var(--danger);
+}
+
+.badge.completed {
+  background: #e8f5e9;
+  color: var(--accent);
 }
 
 .badge.pending {
