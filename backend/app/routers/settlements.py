@@ -11,6 +11,7 @@ from app.deps import get_current_user, get_group_or_404, get_membership
 from app.models import GroupMember, GroupStatus, Settlement, SettlementStatus, User
 from app.schemas import SettlementAction, SettlementCreate, SettlementOut
 from app.services.activity_service import log_activity, notify_users
+from app.services.admin_action_log import log_user_action
 from app.services.balance_service import compute_net_balances, simplify_debts
 from app.ws import manager
 
@@ -124,6 +125,19 @@ async def create_settlement(
         notification_type=EventType.SETTLEMENT_PENDING,
         payload={"group_id": group_id, "settlement_id": settlement.id},
     )
+    log_user_action(
+        db,
+        actor=user,
+        action="settlement.create",
+        target_type="settlement",
+        target_id=settlement.id,
+        payload={
+            "group_id": group_id,
+            "from_user_id": payload.from_user_id,
+            "to_user_id": payload.to_user_id,
+            "amount_cents": payload.amount_cents,
+        },
+    )
     db.commit()
     out = _settlement_out(_load(db, settlement.id))
     await manager.broadcast(
@@ -150,9 +164,11 @@ async def settlement_action(
         settlement.status = SettlementStatus.confirmed
         settlement.confirmed_at = datetime.now(timezone.utc)
         event_type = EventType.SETTLEMENT_CONFIRMED
+        admin_action = "settlement.confirm"
     else:
         settlement.status = SettlementStatus.rejected
         event_type = EventType.SETTLEMENT_REJECTED
+        admin_action = "settlement.reject"
 
     log_activity(
         db,
@@ -166,6 +182,14 @@ async def settlement_action(
         user_ids=[settlement.from_user_id],
         notification_type=event_type,
         payload={"group_id": settlement.group_id, "settlement_id": settlement.id},
+    )
+    log_user_action(
+        db,
+        actor=user,
+        action=admin_action,
+        target_type="settlement",
+        target_id=settlement.id,
+        payload={"group_id": settlement.group_id, "amount_cents": settlement.amount_cents},
     )
     db.commit()
     out = _settlement_out(_load(db, settlement.id))

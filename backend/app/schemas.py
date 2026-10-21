@@ -15,7 +15,7 @@ from app.constants import (
     MIN_REMINDER_DAYS,
 )
 from app.currencies import is_allowed_currency, normalize_currency
-from app.models import GroupStatus, MemberRole, SettlementStatus, SplitType
+from app.models import AppRole, GroupStatus, MemberRole, SettlementStatus, SplitType
 
 
 class UserCreate(BaseModel):
@@ -42,12 +42,46 @@ class UserOut(BaseModel):
     id: int
     email: EmailStr
     name: str
+    role: AppRole = AppRole.user
 
 
 class TokenOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserOut
+
+
+class AdminUserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    email: EmailStr
+    name: str
+    role: AppRole
+    has_password: bool
+    google_linked: bool
+
+
+class AdminRoleUpdate(BaseModel):
+    role: AppRole
+
+
+class ClearLinkedUsersOut(BaseModel):
+    deleted_user_ids: list[int]
+    deleted_count: int
+
+
+class AdminActionLogOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    actor_id: int | None
+    actor_email: str | None
+    action: str
+    target_type: str | None
+    target_id: int | None
+    payload: dict
+    created_at: datetime
 
 
 class GroupCreate(BaseModel):

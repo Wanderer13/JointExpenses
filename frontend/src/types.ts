@@ -1,7 +1,35 @@
+export type AppRole = 'user' | 'admin'
+
 export interface User {
   id: number
   email: string
   name: string
+  role: AppRole
+}
+
+export interface AdminUser {
+  id: number
+  email: string
+  name: string
+  role: AppRole
+  has_password: boolean
+  google_linked: boolean
+}
+
+export interface AdminActionLog {
+  id: number
+  actor_id: number | null
+  actor_email: string | null
+  action: string
+  target_type: string | null
+  target_id: number | null
+  payload: Record<string, unknown>
+  created_at: string
+}
+
+export interface ClearLinkedUsersResult {
+  deleted_user_ids: number[]
+  deleted_count: number
 }
 
 export interface Member {

@@ -14,6 +14,7 @@ from app.deps import get_current_user, get_group_or_404, get_membership, require
 from app.models import Expense, ExpenseSplit, GroupMember, GroupStatus, SplitType, User
 from app.schemas import ExpenseCreate, ExpenseOut, ExpenseUpdate, SplitOut, SplitParticipantIn
 from app.services.activity_service import log_activity, notify_users
+from app.services.admin_action_log import log_user_action
 from app.services.split_service import compute_split_amounts
 from app.ws import manager
 
@@ -143,6 +144,14 @@ async def create_expense(
         notification_type=EventType.EXPENSE_CREATED,
         payload={"group_id": group_id, "expense_id": expense.id, "amount_cents": expense.amount_cents},
     )
+    log_user_action(
+        db,
+        actor=user,
+        action="expense.create",
+        target_type="expense",
+        target_id=expense.id,
+        payload={"group_id": group_id, "amount_cents": expense.amount_cents},
+    )
     db.commit()
     out = _expense_out(_load_expense(db, expense.id))
     await manager.broadcast(
@@ -216,6 +225,14 @@ async def update_expense(
             "amount_cents": expense.amount_cents,
         },
     )
+    log_user_action(
+        db,
+        actor=user,
+        action="expense.update",
+        target_type="expense",
+        target_id=expense.id,
+        payload={"group_id": expense.group_id, "amount_cents": expense.amount_cents},
+    )
     db.commit()
     out = _expense_out(_load_expense(db, expense.id))
     await manager.broadcast(
@@ -256,6 +273,14 @@ async def delete_expense(
         user_ids=[uid for uid in involved if uid != user.id],
         notification_type=EventType.EXPENSE_DELETED,
         payload={"group_id": group_id, "expense_id": expense.id},
+    )
+    log_user_action(
+        db,
+        actor=user,
+        action="expense.delete",
+        target_type="expense",
+        target_id=expense.id,
+        payload={"group_id": group_id, "amount_cents": expense.amount_cents},
     )
     db.delete(expense)
     db.commit()

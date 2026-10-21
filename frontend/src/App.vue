@@ -23,6 +23,7 @@ async function logout() {
         <RouterLink to="/">Groups</RouterLink>
         <RouterLink to="/balances">My balances</RouterLink>
         <RouterLink to="/notifications">Notifications</RouterLink>
+        <RouterLink v-if="auth.isAdmin" to="/admin">Admin</RouterLink>
         <span class="muted">{{ auth.user?.name }}</span>
         <button class="linkish" type="button" @click="logout">Log out</button>
       </nav>

@@ -89,9 +89,18 @@ Never commit a Google **client secret** (`GOCSPX-…`) — this app only needs t
 | bob@example.com | password123 |
 | cara@example.com | password123 |
 
+### Admin (testing)
+
+Set `ADMIN_EMAILS` (comma-separated) in `backend/.env` so those addresses get the `admin` app role on register, Google signup, or seed. Admins can also promote/demote others in the UI.
+
+- Panel: `/admin` (nav link only for admins)
+- Clear linked users: deletes all accounts except the seed defaults above (and never deletes the acting admin)
+- Action log: auth and mutating API calls are recorded for admins to review
+
 ## What works
 
 - Registration / login (JWT in httpOnly cookies + Bearer), refresh/logout, optional Google Sign-In
+- App roles (`user` / `admin`), admin panel, clear non-seed users, app-wide action log
 - Groups: create, members, invite by link and email (absolute join URL + HTML), auto-join on register/login when email was invited; close/reopen; one currency per group
 - Expenses: equal / shares / exact, category, date, comment, receipt; **create / edit / delete** (payer, creator, or owner)
 - Balances per group and across all groups; suggested transfers (greedy)

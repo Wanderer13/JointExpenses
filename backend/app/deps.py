@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.constants import ACCESS_COOKIE
 from app.database import get_db
-from app.models import Group, GroupMember, MemberRole, User
+from app.models import AppRole, Group, GroupMember, MemberRole, User
 from app.security import decode_token, get_user_by_id
 
 bearer = HTTPBearer(auto_error=False)
@@ -33,6 +33,12 @@ def get_current_user(
     user = get_user_by_id(db, user_id)
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    return user
+
+
+def require_admin(user: User = Depends(get_current_user)) -> User:
+    if user.role != AppRole.admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
     return user
 
 

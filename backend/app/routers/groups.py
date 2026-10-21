@@ -18,6 +18,7 @@ from app.schemas import (
     MemberOut,
 )
 from app.services.activity_service import log_activity
+from app.services.admin_action_log import log_user_action
 from app.services.invite_service import (
     build_join_url,
     clear_pending_invite,
@@ -95,6 +96,14 @@ def create_group(
         event_type=EventType.GROUP_CREATED,
         payload={"name": group.name},
     )
+    log_user_action(
+        db,
+        actor=user,
+        action="group.create",
+        target_type="group",
+        target_id=group.id,
+        payload={"name": group.name},
+    )
     db.commit()
     return _group_out(_load_group(db, group.id))
 
@@ -126,6 +135,14 @@ def update_group(
         group.currency = payload.currency.upper()
     if payload.reminder_days is not None:
         group.reminder_days = payload.reminder_days
+    log_user_action(
+        db,
+        actor=user,
+        action="group.update",
+        target_type="group",
+        target_id=group.id,
+        payload={"name": group.name},
+    )
     db.commit()
     return _group_out(_load_group(db, group_id))
 
@@ -154,6 +171,14 @@ def join_by_token(
             actor_id=user.id,
             event_type=EventType.MEMBER_JOINED,
             payload={"user_id": user.id, "name": user.name},
+        )
+        log_user_action(
+            db,
+            actor=user,
+            action="group.join",
+            target_type="group",
+            target_id=group.id,
+            payload={"name": group.name},
         )
     clear_pending_invite(db, group.id, user.email)
     db.commit()
@@ -191,6 +216,14 @@ def invite_by_email(
         event_type=EventType.INVITE_SENT,
         payload={"email": email, "join_url": join_url},
     )
+    log_user_action(
+        db,
+        actor=user,
+        action="group.invite",
+        target_type="group",
+        target_id=group.id,
+        payload={"email": email},
+    )
     db.commit()
     return InviteEmailOut(message="Invite email sent", join_url=join_url)
 
@@ -216,6 +249,14 @@ async def close_group(
         event_type=EventType.GROUP_CLOSED,
         payload={},
     )
+    log_user_action(
+        db,
+        actor=user,
+        action="group.close",
+        target_type="group",
+        target_id=group.id,
+        payload={"name": group.name},
+    )
     db.commit()
     await manager.broadcast(
         group_id, {"type": WsMessageType.GROUP_UPDATED, "group_id": group_id}
@@ -240,6 +281,14 @@ async def reopen_group(
         actor_id=user.id,
         event_type=EventType.GROUP_REOPENED,
         payload={},
+    )
+    log_user_action(
+        db,
+        actor=user,
+        action="group.reopen",
+        target_type="group",
+        target_id=group.id,
+        payload={"name": group.name},
     )
     db.commit()
     await manager.broadcast(

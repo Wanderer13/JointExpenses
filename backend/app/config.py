@@ -45,10 +45,16 @@ class Settings(BaseSettings):
     cookie_secure: bool = False
     max_upload_bytes: int = DEFAULT_MAX_UPLOAD_BYTES
     auth_rate_limit_per_minute: int = DEFAULT_AUTH_RATE_LIMIT_PER_MINUTE
+    # Comma-separated emails granted AppRole.admin on register / Google create / seed.
+    admin_emails: str = ""
 
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def admin_email_set(self) -> set[str]:
+        return {e.strip().lower() for e in self.admin_emails.split(",") if e.strip()}
 
     @property
     def public_frontend_url(self) -> str:

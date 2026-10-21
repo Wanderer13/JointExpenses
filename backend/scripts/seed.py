@@ -23,6 +23,7 @@ from app.models import (
     User,
 )
 from app.security import hash_password
+from app.services.roles import resolve_app_role
 from app.services.split_service import compute_split_amounts
 from app.schemas import SplitParticipantIn
 import secrets
@@ -36,9 +37,24 @@ def main() -> None:
             print("Seed already applied.")
             return
 
-        alice = User(email="alice@example.com", name="Alice", password_hash=hash_password("password123"))
-        bob = User(email="bob@example.com", name="Bob", password_hash=hash_password("password123"))
-        cara = User(email="cara@example.com", name="Cara", password_hash=hash_password("password123"))
+        alice = User(
+            email="alice@example.com",
+            name="Alice",
+            password_hash=hash_password("password123"),
+            role=resolve_app_role("alice@example.com"),
+        )
+        bob = User(
+            email="bob@example.com",
+            name="Bob",
+            password_hash=hash_password("password123"),
+            role=resolve_app_role("bob@example.com"),
+        )
+        cara = User(
+            email="cara@example.com",
+            name="Cara",
+            password_hash=hash_password("password123"),
+            role=resolve_app_role("cara@example.com"),
+        )
         db.add_all([alice, bob, cara])
         db.flush()
 

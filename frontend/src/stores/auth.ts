@@ -8,6 +8,7 @@ export const useAuthStore = defineStore('auth', () => {
   const ready = ref(false)
 
   const isAuthenticated = computed(() => !!user.value)
+  const isAdmin = computed(() => user.value?.role === 'admin')
 
   async function bootstrap() {
     try {
@@ -65,5 +66,5 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = null
   }
 
-  return { user, ready, isAuthenticated, bootstrap, login, register, loginWithGoogle, logout }
+  return { user, ready, isAuthenticated, isAdmin, bootstrap, login, register, loginWithGoogle, logout }
 })

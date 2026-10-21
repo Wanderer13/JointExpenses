@@ -17,14 +17,18 @@ from app.schemas import GoogleAuthIn, MessageOut, TokenOut, UserCreate, UserLogi
 from app.security import (
     cookie_kwargs,
     create_access_token,
+    decode_token,
+    get_user_by_id,
     hash_password,
     issue_refresh_token,
     revoke_refresh_token,
     rotate_refresh_token,
     verify_password,
 )
+from app.services.admin_action_log import log_user_action
 from app.services.google_auth import GoogleAuthError, verify_google_id_token
 from app.services.invite_service import accept_pending_invites
+from app.services.roles import resolve_app_role
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -70,14 +74,24 @@ def register(
     existing = db.query(User).filter(User.email == payload.email.lower()).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
+    email = payload.email.lower()
     user = User(
-        email=payload.email.lower(),
+        email=email,
         name=payload.name.strip(),
         password_hash=hash_password(payload.password),
+        role=resolve_app_role(email),
     )
     db.add(user)
     db.flush()
     accept_pending_invites(db, user)
+    log_user_action(
+        db,
+        actor=user,
+        action="user.register",
+        target_type="user",
+        target_id=user.id,
+        payload={"email": user.email},
+    )
     db.commit()
     db.refresh(user)
     return _issue_tokens(response, db, user)
@@ -99,6 +113,14 @@ def login(
     ):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     accept_pending_invites(db, user)
+    log_user_action(
+        db,
+        actor=user,
+        action="user.login",
+        target_type="user",
+        target_id=user.id,
+        payload={"email": user.email},
+    )
     db.commit()
     return _issue_tokens(response, db, user)
 
@@ -129,6 +151,7 @@ def google_auth(
     email = str(idinfo["email"]).lower()
     name = str(idinfo.get("name") or email.split("@")[0])[:120]
 
+    created = False
     user = db.query(User).filter(User.google_sub == google_sub).first()
     if user is None:
         user = db.query(User).filter(User.email == email).first()
@@ -152,11 +175,21 @@ def google_auth(
                 name=name,
                 password_hash=None,
                 google_sub=google_sub,
+                role=resolve_app_role(email),
             )
             db.add(user)
+            created = True
 
     db.flush()
     accept_pending_invites(db, user)
+    log_user_action(
+        db,
+        actor=user,
+        action="user.login_google",
+        target_type="user",
+        target_id=user.id,
+        payload={"email": user.email, "created": created},
+    )
     db.commit()
     db.refresh(user)
     return _issue_tokens(response, db, user)
@@ -179,7 +212,28 @@ def refresh(request: Request, response: Response, db: Session = Depends(get_db))
 
 @router.post("/logout", response_model=MessageOut)
 def logout(request: Request, response: Response, db: Session = Depends(get_db)) -> MessageOut:
+    actor: User | None = None
+    auth = request.headers.get("Authorization") or ""
+    token = None
+    if auth.lower().startswith("bearer "):
+        token = auth.split(" ", 1)[1].strip() or None
+    if not token:
+        token = request.cookies.get(ACCESS_COOKIE)
+    if token:
+        user_id = decode_token(token)
+        if user_id is not None:
+            actor = get_user_by_id(db, user_id)
+    if actor is not None:
+        log_user_action(
+            db,
+            actor=actor,
+            action="user.logout",
+            target_type="user",
+            target_id=actor.id,
+            payload={"email": actor.email},
+        )
     revoke_refresh_token(db, request.cookies.get(REFRESH_COOKIE))
+    db.commit()
     _clear_auth_cookies(response)
     return MessageOut(message="Logged out")
 

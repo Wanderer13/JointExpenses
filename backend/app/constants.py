@@ -39,6 +39,19 @@ DEFAULT_AUTH_RATE_LIMIT_PER_MINUTE = 30
 # Google account linking (must match auth router detail text)
 GOOGLE_LINK_PASSWORD_REQUIRED = "Account exists — provide password to link Google Sign-In"
 
+# Seed demo accounts protected from admin clear-linked wipe
+DEFAULT_SEED_EMAILS = frozenset(
+    {
+        "alice@example.com",
+        "bob@example.com",
+        "cara@example.com",
+    }
+)
+
+# Admin action-log feed
+DEFAULT_ACTION_LOG_LIMIT = 50
+MAX_ACTION_LOG_LIMIT = 200
+
 # Mail
 MAIL_BACKEND_STUB = "stub"
 MAIL_BACKEND_SMTP = "smtp"

@@ -30,6 +30,11 @@ class MemberRole(str, enum.Enum):
     member = "member"
 
 
+class AppRole(str, enum.Enum):
+    user = "user"
+    admin = "admin"
+
+
 class SplitType(str, enum.Enum):
     equal = "equal"
     shares = "shares"
@@ -50,6 +55,9 @@ class User(Base):
     name: Mapped[str] = mapped_column(String(120))
     password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     google_sub: Mapped[str | None] = mapped_column(String(255), unique=True, index=True, nullable=True)
+    role: Mapped[AppRole] = mapped_column(
+        Enum(AppRole, native_enum=False), default=AppRole.user, server_default=AppRole.user.value
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     memberships: Mapped[list[GroupMember]] = relationship(back_populates="user")
@@ -215,4 +223,19 @@ class PendingInvite(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     group_id: Mapped[int] = mapped_column(ForeignKey("groups.id", ondelete="CASCADE"), index=True)
     email: Mapped[str] = mapped_column(String(255), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AdminActionLog(Base):
+    __tablename__ = "admin_action_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    actor_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    actor_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    action: Mapped[str] = mapped_column(String(80), index=True)
+    target_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    target_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    payload: Mapped[str] = mapped_column(Text, default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
