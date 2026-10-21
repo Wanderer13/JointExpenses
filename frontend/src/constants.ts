@@ -52,10 +52,26 @@ export function formatMajorInput(cents: number): string {
   return centsToMajor(cents).toFixed(2)
 }
 
-/** Only same-origin relative paths; blocks open redirects. */
+/** In-app destinations that show the main shell tabs after login. */
+const APP_TAB_PREFIXES = ['/groups', '/balances', '/notifications', '/join'] as const
+
+/** Only same-origin relative paths; blocks open redirects and the login page. */
 export function safeRedirectPath(raw: unknown, fallback = '/'): string {
   if (typeof raw !== 'string' || !raw.startsWith('/') || raw.startsWith('//')) {
     return fallback
   }
+  if (raw === '/login' || raw.startsWith('/login?')) {
+    return fallback
+  }
   return raw
+}
+
+/** Prefer a deep link when safe; otherwise land on Groups. */
+export function postLoginPath(raw: unknown): string {
+  const path = safeRedirectPath(raw, '/')
+  if (path === '/') return '/'
+  if (APP_TAB_PREFIXES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`))) {
+    return path
+  }
+  return '/'
 }

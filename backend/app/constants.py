@@ -43,6 +43,7 @@ GOOGLE_LINK_PASSWORD_REQUIRED = "Account exists — provide password to link Goo
 MAIL_BACKEND_STUB = "stub"
 MAIL_BACKEND_SMTP = "smtp"
 DEFAULT_SMTP_PORT = 587
+DEFAULT_FRONTEND_URL = "http://127.0.0.1:5173"
 
 # Uploads
 BYTES_PER_KIBIBYTE = 1024

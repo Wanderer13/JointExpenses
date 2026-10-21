@@ -5,7 +5,7 @@ import { ApiError } from '../api'
 import {
   GOOGLE_LINK_PASSWORD_HINT,
   HTTP_CONFLICT,
-  safeRedirectPath,
+  postLoginPath,
 } from '../constants'
 import { useAuthStore } from '../stores/auth'
 
@@ -25,7 +25,8 @@ const googleBtn = ref<HTMLElement | null>(null)
 let googleScript: HTMLScriptElement | null = null
 
 async function afterAuth() {
-  await router.push(safeRedirectPath(route.query.redirect))
+  // Land on Groups (or a safe deep link) so the main shell tabs are visible.
+  await router.replace(postLoginPath(route.query.redirect))
 }
 
 async function submit() {

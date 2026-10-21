@@ -67,14 +67,19 @@ Email/password auth always works. To enable **Continue with Google**:
 3. Set the same client ID in both places:
 
 ```bash
-# backend/.env
-GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
-
-# frontend/.env
-VITE_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+# Copy from the examples (demo client ID is already filled in):
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env
 ```
 
-If Google Sign-In hits an existing email/password account, enter that password in the form and retry — accounts are linked only after password proof.
+Or set the same Web client ID in both files:
+
+```bash
+GOOGLE_CLIENT_ID=58304476274-je7ea6s4rc3a7ajl7o0u0hdlgrgdnhju.apps.googleusercontent.com
+VITE_GOOGLE_CLIENT_ID=58304476274-je7ea6s4rc3a7ajl7o0u0hdlgrgdnhju.apps.googleusercontent.com
+```
+
+Never commit a Google **client secret** (`GOCSPX-…`) — this app only needs the client ID. If Sign-In hits an existing email/password account, enter that password and retry — linking requires password proof.
 
 ### Demo users (after seed)
 

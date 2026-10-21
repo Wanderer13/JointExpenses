@@ -9,6 +9,7 @@ from app.constants import (
     DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES,
     DEFAULT_APP_ENV,
     DEFAULT_AUTH_RATE_LIMIT_PER_MINUTE,
+    DEFAULT_FRONTEND_URL,
     DEFAULT_MAX_UPLOAD_BYTES,
     DEFAULT_REFRESH_TOKEN_EXPIRE_DAYS,
     DEFAULT_REMINDER_CHECK_SECONDS,
@@ -28,6 +29,8 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES
     refresh_token_expire_days: int = DEFAULT_REFRESH_TOKEN_EXPIRE_DAYS
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080,http://127.0.0.1:8080"
+    # Public UI origin for invite/reminder links in emails (no trailing slash).
+    frontend_url: str = DEFAULT_FRONTEND_URL
     upload_dir: str = str(Path(__file__).resolve().parent.parent / "uploads")
     mail_outbox_dir: str = str(Path(__file__).resolve().parent.parent / "mail_outbox")
     reminder_check_seconds: int = DEFAULT_REMINDER_CHECK_SECONDS
@@ -46,6 +49,14 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def public_frontend_url(self) -> str:
+        url = (self.frontend_url or "").strip().rstrip("/")
+        if url:
+            return url
+        origins = self.cors_origin_list
+        return origins[0].rstrip("/") if origins else DEFAULT_FRONTEND_URL
 
     @property
     def is_production(self) -> bool:
